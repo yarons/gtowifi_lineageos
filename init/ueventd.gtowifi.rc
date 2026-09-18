@@ -1,0 +1,9 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Firmware comes from the tablet's own apnhlos partition; nothing proprietary is in the build
+firmware_directories /vendor/firmware_mnt/image/ /odm/firmware/
+
+modalias_handling enabled

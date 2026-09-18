@@ -1,0 +1,20 @@
+//
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+prebuilt_etc {
+    name: "fstab.gtowifi",
+    src: "fstab.gtowifi",
+    vendor: true,
+    ramdisk_available: true,
+}
+
+// Same installed name; device.mk picks one of the two
+prebuilt_etc {
+    name: "fstab.gtowifi.sdcard",
+    src: "fstab.gtowifi.sdcard",
+    filename: "fstab.gtowifi",
+    vendor: true,
+    ramdisk_available: true,
+}

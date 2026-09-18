@@ -1,0 +1,14 @@
+# automatically loaded by ueventd
+bluetooth
+btqca
+btqcomsmd
+cfg80211
+libarc4
+mac80211
+mdt_loader
+qcom_common
+qcom_pil_info
+qcom_wcnss_pil
+rfkill
+wcn36xx
+wcnss_ctrl

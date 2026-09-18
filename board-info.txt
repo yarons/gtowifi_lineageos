@@ -1,0 +1,1 @@
+require board=gtowifi_mainline
