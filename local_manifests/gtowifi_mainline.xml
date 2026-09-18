@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Copy to .repo/local_manifests/ of a lineage-23.2 checkout.
-  Everything else (device/mainline/*, external/lk2nd, kernel/mainline/configs, ...) is pulled in
-  by `breakfast gtowifi_mainline` through lineage.dependencies.
+  Everything else (device/mainline/*, external/lk2nd, kernel/mainline/configs, ...) is listed in
+  gtowifi_mainline_deps.xml next to this file: copy both, roomservice cannot resolve the
+  dependencies of a device tree that is not in the LineageOS organisation.
 
   Neither repository below exists yet on 2026-09-18.
 -->

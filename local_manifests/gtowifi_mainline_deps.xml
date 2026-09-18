@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  lineage.dependencies of this tree, resolved recursively (2026-09-18).
+
+  `breakfast` cannot do this here: the product makefiles include device/mainline/qcom-common before
+  roomservice runs, and roomservice only resolves dependencies for device repositories it finds in the
+  LineageOS organisation or in a manifest. Copy to .repo/local_manifests/ and `repo sync` these paths
+  before the first `breakfast gtowifi_mainline`.
+-->
+<manifest>
+  <project path="device/mainline/common" name="LineageOS/android_device_mainline_common" remote="github" revision="lineage-23.2" />
+  <project path="device/mainline/qcom-common" name="LineageOS/android_device_mainline_qcom-common" remote="github" revision="lineage-23.2" />
+  <project path="external/drm_hwcomposer-upstream" name="LineageOS/android_external_drm_hwcomposer-upstream" remote="github" revision="lineage-23.2" />
+  <project path="external/libdisplay-info-upstream" name="LineageOS/android_external_libdisplay-info-upstream" remote="github" revision="lineage-23.2" />
+  <project path="external/linux-firmware-mainline" name="LineageOS/android_external_linux-firmware-mainline" remote="github" revision="lineage-23.2" />
+  <project path="external/lk2nd" name="LineageOS/android_external_lk2nd" remote="github" revision="lineage-23.2" />
+  <project path="external/mesa" name="LineageOS/android_external_mesa" remote="github" revision="lineage-23.2" />
+  <project path="external/minigbm-upstream" name="LineageOS/android_external_minigbm-upstream" remote="github" revision="lineage-23.2" />
+  <project path="external/tinyhal" name="LineageOS/android_external_tinyhal" remote="github" revision="lineage-23.2" />
+  <project path="hardware/intel/sensors-iio" name="LineageOS/android_hardware_intel_sensors-iio" remote="github" revision="lineage-23.2" />
+  <project path="hardware/mainline/common" name="LineageOS/android_hardware_mainline_common" remote="github" revision="lineage-23.2" />
+  <project path="hardware/mainline/qcom" name="LineageOS/android_hardware_mainline_qcom" remote="github" revision="lineage-23.2" />
+  <project path="hardware/sony/timekeep" name="LineageOS/android_hardware_sony_timekeep" remote="github" revision="lineage-23.2" />
+  <project path="kernel/mainline/configs" name="LineageOS/android_kernel_mainline_configs" remote="github" revision="lineage-23.2" />
+  <project path="prebuilts/mesa-build-dep" name="LineageOS/android_prebuilts_mesa-build-dep" remote="github" revision="lineage-23.2" />
+</manifest>
