@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-DEVICE_PATH := device/samsung/gtowifi-mainline
+DEVICE_PATH := device/samsung/gtowifi_mainline
 
 # Inherit from mainline/qcom-common
 include device/mainline/qcom-common/BoardConfigMainlineQcomCommon.mk

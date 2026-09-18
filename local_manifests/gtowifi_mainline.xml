@@ -10,7 +10,7 @@
 <manifest>
   <remote name="yarons" fetch="https://github.com/yarons" />
 
-  <project path="device/samsung/gtowifi-mainline" name="android_device_samsung_gtowifi-mainline" remote="yarons" revision="lineage-23.2" />
+  <project path="device/samsung/gtowifi_mainline" name="android_device_samsung_gtowifi_mainline" remote="yarons" revision="lineage-23.2" />
 
   <!-- msm89x7-mainline 7.1.3 + sdm429-samsung-gtowifi.dts + the three ANDROID patches (README.md) -->
   <project path="kernel/mainline/msm89x7-mainline" name="linux_msm89x7" remote="yarons" revision="gtowifi/android-7.1.3" clone-depth="1" />

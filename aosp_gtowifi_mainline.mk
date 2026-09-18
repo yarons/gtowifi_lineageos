@@ -8,7 +8,7 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
 
 # Inherit from device
-$(call inherit-product, device/samsung/gtowifi-mainline/device.mk)
+$(call inherit-product, device/samsung/gtowifi_mainline/device.mk)
 
 PRODUCT_CHARACTERISTICS := tablet
 

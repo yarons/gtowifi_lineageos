@@ -80,7 +80,7 @@ and run `fastboot boot`. The installed OS is not touched.
 
     export GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD=true
     breakfast gtowifi_mainline userdebug && mka bootimage systemimage vendorimage vendor_dlkmimage
-    sudo device/samsung/gtowifi-mainline/tools/partition-sdcard.sh /dev/sdX
+    sudo device/samsung/gtowifi_mainline/tools/partition-sdcard.sh /dev/sdX
     fastboot boot $OUT/boot.img.mkbootimg
 
 `boot.img.mkbootimg` is header v2 and needs an lk2nd built with `OSVERSION_IN_BOOTIMAGE=1` (the one this
@@ -94,7 +94,7 @@ keymaster, which a mainline kernel cannot reach. The same applies on the way bac
 ## Build
 
     repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs
-    cp device/samsung/gtowifi-mainline/local_manifests/gtowifi_mainline.xml .repo/local_manifests/
+    cp device/samsung/gtowifi_mainline/local_manifests/gtowifi_mainline.xml .repo/local_manifests/
     repo sync
     # platform patches: device/mainline/generic/docs/patches.md
     source build/envsetup.sh && breakfast gtowifi_mainline userdebug && mka bacon

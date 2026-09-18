@@ -11,7 +11,7 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
 $(call inherit-product, vendor/lineage/config/common_full_tablet_wifionly.mk)
 
 # Inherit from device
-$(call inherit-product, device/samsung/gtowifi-mainline/device.mk)
+$(call inherit-product, device/samsung/gtowifi_mainline/device.mk)
 
 PRODUCT_CHARACTERISTICS := tablet
 
