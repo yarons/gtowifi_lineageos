@@ -22,10 +22,13 @@ TARGET_LK2ND_MAKE_FLAGS := OSVERSION_IN_BOOTIMAGE=1
 
 # Boot parameters
 ifeq ($(GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD),true)
-# Development mode: every Android partition lives on the microSD card, eMMC is only read
+# Development mode: every Android partition lives on the microSD card, eMMC is only read.
+# Only the boot image differs between the two modes: system and vendor carry both fstabs.
 GTOWIFI_BOOT_DEVICES := soc@0/7864900.mmc
+GTOWIFI_FSTAB_SUFFIX := gtowifi_sdcard
 else
 GTOWIFI_BOOT_DEVICES := soc@0/7824900.mmc
+GTOWIFI_FSTAB_SUFFIX := gtowifi
 endif
 
 BOARD_KERNEL_CMDLINE := \
@@ -34,6 +37,7 @@ BOARD_KERNEL_CMDLINE := \
     $(MAINLINE_QCOM_KERNEL_PARAMS) \
     $(MAINLINE_QCOM_SOC_KERNEL_PARAMS) \
     androidboot.boot_devices=$(GTOWIFI_BOOT_DEVICES) \
+    androidboot.fstab_suffix=$(GTOWIFI_FSTAB_SUFFIX) \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
     console=tty0 \

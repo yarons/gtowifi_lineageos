@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: The LineageOS Project
 # SPDX-License-Identifier: Apache-2.0
 #
-# Development layout (GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD := true): every Android partition is a
+# Development layout (androidboot.fstab_suffix=gtowifi_sdcard, set by
+# GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD := true): every Android partition is a
 # GPT partition on the microSD card, the kernel is started with `fastboot boot` from lk2nd.
 # Nothing on the eMMC is written, so the installed OS keeps working.
 #

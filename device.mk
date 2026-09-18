@@ -47,15 +47,12 @@ PRODUCT_PACKAGES += \
     vndservicemanager
 
 # Init
-ifeq ($(GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD),true)
-PRODUCT_PACKAGES += \
-    fstab.gtowifi.sdcard \
-    fstab.gtowifi.sdcard.ramdisk
-else
+# Both layouts are installed; the kernel command line picks one (androidboot.fstab_suffix)
 PRODUCT_PACKAGES += \
     fstab.gtowifi \
-    fstab.gtowifi.ramdisk
-endif
+    fstab.gtowifi.ramdisk \
+    fstab.gtowifi_sdcard \
+    fstab.gtowifi_sdcard.ramdisk
 
 PRODUCT_PACKAGES += \
     init.gtowifi.rc \

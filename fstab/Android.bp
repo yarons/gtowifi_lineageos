@@ -10,11 +10,12 @@ prebuilt_etc {
     ramdisk_available: true,
 }
 
-// Same installed name; device.mk picks one of the two
+// Development layout with every Android partition on the microSD card. Both files are always
+// installed; first-stage init takes this one when the kernel command line carries
+// androidboot.fstab_suffix=gtowifi_sdcard (BoardConfig.mk, GTOWIFI_MAINLINE_SYSTEM_ON_SDCARD).
 prebuilt_etc {
-    name: "fstab.gtowifi.sdcard",
-    src: "fstab.gtowifi.sdcard",
-    filename: "fstab.gtowifi",
+    name: "fstab.gtowifi_sdcard",
+    src: "fstab.gtowifi_sdcard",
     vendor: true,
     ramdisk_available: true,
 }
