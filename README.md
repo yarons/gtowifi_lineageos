@@ -28,7 +28,7 @@ eBPF features its 4.9 kernel does not have.
 
 | Path | URL | Branch |
 |---|---|---|
-| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/battery` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and battery) | 7.1.3 |
+| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/battery-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads) | 7.1.3 |
 
 Patches needed on top, from `kernel/common-patches` (`main-kernel/android-mainline`), exactly as for the
 other msm89x7 targets of the stack:
