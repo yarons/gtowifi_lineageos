@@ -17,4 +17,8 @@ algorithms:
       coarseStep: 48
       fineStep: 12
       settle: 0
+      # Manual focus (LensPosition 0.0 to 10.0): first guess, the lens is sharp at 320 to 360 for
+      # one to two metres.
+      farPosition: 250
+      macroPosition: 750
 ...

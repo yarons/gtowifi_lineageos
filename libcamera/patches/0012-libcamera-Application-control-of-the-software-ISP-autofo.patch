@@ -1,0 +1,686 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: Application control of the software ISP autofocus, Android support
+
+Soft IPA: the lens controls are passed to init() as well, so that the Af
+algorithm can register AfMode, AfTrigger and LensPosition for cameras with
+a focus lens. Manual mode positions the lens with LensPosition (0.0 far to
+10.0 near, mapped linearly to the lens positions "farPosition" and
+"macroPosition" of the tuning file: the lens is not calibrated), auto mode
+searches when triggered, continuous mode (the default) as before, and a
+trigger holds the focus until it is cancelled. AfState and LensPosition are
+reported in the metadata.
+
+Android HAL, for cameras with controls::AfMode: AF modes OFF, AUTO,
+CONTINUOUS_VIDEO and CONTINUOUS_PICTURE, one AF region (the measurement
+stays in the centre for now), minimum focus distance from LensPosition,
+continuous AF in the request templates, AF_MODE / AF_TRIGGER /
+LENS_FOCUS_DISTANCE translated to the libcamera controls, AF_STATE and
+LENS_FOCUS_DISTANCE and the AF regions of the request (applications wait for
+them) in the results. The test pattern and face detection modes are only set for
+cameras that have it (it logged an error for every request).
+
+The HAL no longer forgets the settings of the first request of a session:
+lastSettings_ was reset right after it had been set from that request, which
+left every following request of a repeating request without settings.
+---
+--- a/include/libcamera/internal/software_isp/software_isp.h
++++ b/include/libcamera/internal/software_isp/software_isp.h
+@@ -48,7 +48,8 @@
+ {
+ public:
+ 	SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+-		    ControlInfoMap *ipaControls);
++		    ControlInfoMap *ipaControls,
++		    const ControlInfoMap &lensControls = {});
+ 	~SoftwareIsp();
+ 
+ 	int loadConfiguration([[maybe_unused]] const std::string &filename) { return 0; }
+--- a/include/libcamera/ipa/soft.mojom
++++ b/include/libcamera/ipa/soft.mojom
+@@ -18,7 +18,8 @@
+ 	     libcamera.SharedFD fdStats,
+ 	     libcamera.SharedFD fdParams,
+ 	     libcamera.IPACameraSensorInfo sensorInfo,
+-	     libcamera.ControlInfoMap sensorControls)
++	     libcamera.ControlInfoMap sensorControls,
++	     libcamera.ControlInfoMap lensControls)
+ 		=> (int32 ret, libcamera.ControlInfoMap ipaControls, bool ccmEnabled);
+ 	start() => (int32 ret);
+ 	stop();
+--- a/src/android/camera_capabilities.cpp
++++ b/src/android/camera_capabilities.cpp
+@@ -894,7 +894,9 @@
+ 		ANDROID_CONTROL_AE_PRECAPTURE_TRIGGER,
+ 		ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
+ 		ANDROID_CONTROL_AF_MODE,
++		ANDROID_CONTROL_AF_REGIONS,
+ 		ANDROID_CONTROL_AF_TRIGGER,
++		ANDROID_LENS_FOCUS_DISTANCE,
+ 		ANDROID_CONTROL_AWB_LOCK,
+ 		ANDROID_CONTROL_AWB_MODE,
+ 		ANDROID_CONTROL_CAPTURE_INTENT,
+@@ -924,6 +926,7 @@
+ 		ANDROID_CONTROL_AE_STATE,
+ 		ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
+ 		ANDROID_CONTROL_AF_MODE,
++		ANDROID_CONTROL_AF_REGIONS,
+ 		ANDROID_CONTROL_AF_STATE,
+ 		ANDROID_CONTROL_AF_TRIGGER,
+ 		ANDROID_CONTROL_AWB_LOCK,
+@@ -947,6 +950,7 @@
+ 		ANDROID_LENS_APERTURE,
+ 		ANDROID_LENS_FOCAL_LENGTH,
+ 		ANDROID_LENS_OPTICAL_STABILIZATION_MODE,
++		ANDROID_LENS_FOCUS_DISTANCE,
+ 		ANDROID_LENS_STATE,
+ 		ANDROID_NOISE_REDUCTION_MODE,
+ 		ANDROID_REQUEST_PIPELINE_DEPTH,
+@@ -1005,9 +1009,16 @@
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AE_COMPENSATION_STEP,
+ 				  aeCompensationStep);
+ 
++	const bool afAvailable = camera_->controls().count(&controls::AfMode);
++
+ 	std::vector<uint8_t> availableAfModes = {
+ 		ANDROID_CONTROL_AF_MODE_OFF,
+ 	};
++	if (afAvailable) {
++		availableAfModes.push_back(ANDROID_CONTROL_AF_MODE_AUTO);
++		availableAfModes.push_back(ANDROID_CONTROL_AF_MODE_CONTINUOUS_VIDEO);
++		availableAfModes.push_back(ANDROID_CONTROL_AF_MODE_CONTINUOUS_PICTURE);
++	}
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AF_AVAILABLE_MODES,
+ 				  availableAfModes);
+ 
+@@ -1039,8 +1050,13 @@
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AWB_AVAILABLE_MODES,
+ 				  availableAwbModes);
+ 
++	/*
++	 * \todo The autofocus measures the centre of the picture whatever the
++	 * region is. One region is reported because applications only offer
++	 * touch to focus with it.
++	 */
+ 	std::vector<int32_t> availableMaxRegions = {
+-		0, 0, 0,
++		0, 0, afAvailable ? 1 : 0,
+ 	};
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_MAX_REGIONS,
+ 				  availableMaxRegions);
+@@ -1327,7 +1343,14 @@
+ 	staticMetadata_->addEntry(ANDROID_LENS_INFO_HYPERFOCAL_DISTANCE,
+ 				  hypeFocalDistance);
+ 
++	/*
++	 * The lens position of a camera with autofocus is not calibrated: the
++	 * range is 0 (far) to the maximum of the LensPosition control (near).
++	 */
+ 	float minFocusDistance = 0;
++	const auto lensPositionInfo = camera_->controls().find(&controls::LensPosition);
++	if (afAvailable && lensPositionInfo != camera_->controls().end())
++		minFocusDistance = lensPositionInfo->second.max().get<float>();
+ 	staticMetadata_->addEntry(ANDROID_LENS_INFO_MINIMUM_FOCUS_DISTANCE,
+ 				  minFocusDistance);
+ 
+@@ -1611,6 +1634,8 @@
+ 				  aeAntibandingMode);
+ 
+ 	uint8_t afMode = ANDROID_CONTROL_AF_MODE_OFF;
++	if (camera_->controls().count(&controls::AfMode))
++		afMode = ANDROID_CONTROL_AF_MODE_CONTINUOUS_PICTURE;
+ 	requestTemplate->addEntry(ANDROID_CONTROL_AF_MODE, afMode);
+ 
+ 	uint8_t afTrigger = ANDROID_CONTROL_AF_TRIGGER_IDLE;
+@@ -1684,5 +1709,10 @@
+ 	previewTemplate->updateEntry(ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
+ 				     entry.data.i32 + 2, 2);
+ 
++	if (camera_->controls().count(&controls::AfMode)) {
++		uint8_t afMode = ANDROID_CONTROL_AF_MODE_CONTINUOUS_VIDEO;
++		previewTemplate->updateEntry(ANDROID_CONTROL_AF_MODE, &afMode, 1);
++	}
++
+ 	return previewTemplate;
+ }
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -902,12 +902,58 @@
+ 		controls.set(controls::ScalerCrop, cropRegion);
+ 	}
+ 
+-	if (settings.getEntry(ANDROID_STATISTICS_FACE_DETECT_MODE, &entry)) {
++	/* Face detection, for cameras that have it. */
++	if (camera_->controls().count(&controls::draft::FaceDetectMode) &&
++	    settings.getEntry(ANDROID_STATISTICS_FACE_DETECT_MODE, &entry)) {
+ 		const uint8_t *data = entry.data.u8;
+ 		controls.set(controls::draft::FaceDetectMode, data[0]);
+ 	}
+ 
+-	if (settings.getEntry(ANDROID_SENSOR_TEST_PATTERN_MODE, &entry)) {
++	/* Autofocus, for cameras that have it. */
++	if (camera_->controls().count(&controls::AfMode)) {
++		if (settings.getEntry(ANDROID_CONTROL_AF_MODE, &entry)) {
++			int32_t afMode;
++			switch (*entry.data.u8) {
++			case ANDROID_CONTROL_AF_MODE_OFF:
++				afMode = controls::AfModeManual;
++				break;
++			case ANDROID_CONTROL_AF_MODE_AUTO:
++			case ANDROID_CONTROL_AF_MODE_MACRO:
++				afMode = controls::AfModeAuto;
++				break;
++			default:
++				afMode = controls::AfModeContinuous;
++				break;
++			}
++			controls.set(controls::AfMode, afMode);
++
++			/* The focus distance only counts with the autofocus off. */
++			if (afMode == controls::AfModeManual &&
++			    settings.getEntry(ANDROID_LENS_FOCUS_DISTANCE, &entry))
++				controls.set(controls::LensPosition, *entry.data.f);
++		}
++
++		if (settings.getEntry(ANDROID_CONTROL_AF_TRIGGER, &entry)) {
++			if (*entry.data.u8 != ANDROID_CONTROL_AF_TRIGGER_IDLE)
++				LOG(HAL, Debug)
++					<< "AF trigger "
++					<< static_cast<unsigned int>(*entry.data.u8);
++
++			if (*entry.data.u8 == ANDROID_CONTROL_AF_TRIGGER_START) {
++				controls.set(controls::AfTrigger,
++					     static_cast<int32_t>(controls::AfTriggerStart));
++				afHeld_ = true;
++			} else if (*entry.data.u8 == ANDROID_CONTROL_AF_TRIGGER_CANCEL) {
++				controls.set(controls::AfTrigger,
++					     static_cast<int32_t>(controls::AfTriggerCancel));
++				afHeld_ = false;
++			}
++		}
++	}
++
++	/* The test pattern of cameras that have one. */
++	if (camera_->controls().count(&controls::draft::TestPatternMode) &&
++	    settings.getEntry(ANDROID_SENSOR_TEST_PATTERN_MODE, &entry)) {
+ 		const int32_t data = *entry.data.i32;
+ 		int32_t testPatternMode = controls::draft::TestPatternModeOff;
+ 		switch (data) {
+@@ -1208,8 +1254,12 @@
+ 	}
+ 
+ 	if (state_ == State::Stopped) {
+-		lastSettings_ = {};
+-
++		/*
++		 * lastSettings_ is not reset here: it has just been set from
++		 * this request, the first of the session, which must have
++		 * settings. Resetting it left all the following requests of a
++		 * repeating request, which come without settings, with none.
++		 */
+ 		ret = camera_->start();
+ 		if (ret) {
+ 			LOG(HAL, Error) << "Failed to start camera";
+@@ -1593,15 +1643,64 @@
+ 	value = ANDROID_CONTROL_AE_STATE_CONVERGED;
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AE_STATE, value);
+ 
+-	value = ANDROID_CONTROL_AF_MODE_OFF;
+-	resultMetadata->addEntry(ANDROID_CONTROL_AF_MODE, value);
++	/*
++	 * Autofocus: the mode and the trigger are those of the request, the
++	 * state comes from the camera. A trigger holds the focus, also in the
++	 * continuous modes.
++	 */
++	const bool afAvailable = camera_->controls().count(&controls::AfMode);
++
++	uint8_t afMode = ANDROID_CONTROL_AF_MODE_OFF;
++	if (afAvailable && settings.getEntry(ANDROID_CONTROL_AF_MODE, &entry))
++		afMode = *entry.data.u8;
++	resultMetadata->addEntry(ANDROID_CONTROL_AF_MODE, afMode);
+ 
+ 	value = ANDROID_CONTROL_AF_STATE_INACTIVE;
++	const auto &afState = metadata.get(controls::AfState);
++	if (afState && afMode != ANDROID_CONTROL_AF_MODE_OFF) {
++		const bool passive = !afHeld_ &&
++				     (afMode == ANDROID_CONTROL_AF_MODE_CONTINUOUS_PICTURE ||
++				      afMode == ANDROID_CONTROL_AF_MODE_CONTINUOUS_VIDEO);
++
++		switch (*afState) {
++		case controls::AfStateScanning:
++			value = passive ? ANDROID_CONTROL_AF_STATE_PASSIVE_SCAN
++					: ANDROID_CONTROL_AF_STATE_ACTIVE_SCAN;
++			break;
++		case controls::AfStateFocused:
++			value = passive ? ANDROID_CONTROL_AF_STATE_PASSIVE_FOCUSED
++					: ANDROID_CONTROL_AF_STATE_FOCUSED_LOCKED;
++			break;
++		case controls::AfStateFailed:
++			value = passive ? ANDROID_CONTROL_AF_STATE_PASSIVE_UNFOCUSED
++					: ANDROID_CONTROL_AF_STATE_NOT_FOCUSED_LOCKED;
++			break;
++		default:
++			break;
++		}
++	}
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AF_STATE, value);
+ 
++	if (afAvailable)
++		LOG(HAL, Debug)
++			<< "AF mode " << static_cast<unsigned int>(afMode)
++			<< ", state " << static_cast<unsigned int>(value)
++			<< " (camera: " << afState.value_or(-1) << ")";
++
+ 	value = ANDROID_CONTROL_AF_TRIGGER_IDLE;
++	if (afAvailable && settings.getEntry(ANDROID_CONTROL_AF_TRIGGER, &entry))
++		value = *entry.data.u8;
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AF_TRIGGER, value);
+ 
++	/* Applications wait for the regions they have set to show up. */
++	if (afAvailable && settings.getEntry(ANDROID_CONTROL_AF_REGIONS, &entry))
++		resultMetadata->addEntry(ANDROID_CONTROL_AF_REGIONS,
++					 entry.data.i32, entry.count);
++
++	const auto &lensPosition = metadata.get(controls::LensPosition);
++	if (lensPosition)
++		resultMetadata->addEntry(ANDROID_LENS_FOCUS_DISTANCE, *lensPosition);
++
+ 	value = ANDROID_CONTROL_AWB_MODE_AUTO;
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AWB_MODE, value);
+ 
+--- a/src/android/camera_device.h
++++ b/src/android/camera_device.h
+@@ -128,4 +128,5 @@
+ 	int orientation_;
+ 
+ 	CameraMetadata lastSettings_;
++	bool afHeld_ = false;
+ };
+--- a/src/ipa/simple/algorithms/af.cpp
++++ b/src/ipa/simple/algorithms/af.cpp
+@@ -1,6 +1,6 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ /*
+- * Contrast based continuous autofocus
++ * Contrast based autofocus
+  */
+ 
+ #include "af.h"
+@@ -9,20 +9,29 @@
+ 
+ #include <libcamera/base/log.h>
+ 
++#include <libcamera/control_ids.h>
++
+ /**
+  * \file af.h
+- * \brief Contrast based continuous autofocus for the software ISP
++ * \brief Contrast based autofocus for the software ISP
+  *
+  * The statistics carry the sum of the squared luminance differences between
+  * neighbouring samples in the centre of the picture. It is highest when the
+  * picture is in focus. The algorithm climbs that hill: it moves the lens in one
+  * direction as long as the contrast improves, comes back to the best position
+  * when it drops, halves the step and repeats in both directions until the step
+- * is small. It then keeps the lens where it is until the contrast has changed
+- * considerably for some time, which means that the scene is another one.
++ * is small.
++ *
++ * In continuous mode, the default, it then keeps the lens where it is until
++ * the contrast has changed considerably for some time, which means that the
++ * scene is another one, and searches again. A trigger holds the focus until it
++ * is cancelled. In auto mode it only searches when triggered. In manual mode
++ * the application positions the lens with LensPosition, whose range of 0.0
++ * (far) to 10.0 (near) is mapped linearly to the positions given by the tuning
++ * file: the lens is not calibrated in dioptres.
+  *
+  * The lens only settles, and the statistics only arrive, every few frames, so
+- * a search takes a few seconds.
++ * a search takes a second or two.
+  */
+ 
+ namespace libcamera {
+@@ -31,12 +40,20 @@
+ 
+ LOG_DEFINE_CATEGORY(IPASoftAf)
+ 
+-int Af::init([[maybe_unused]] IPAContext &context, const ValueNode &tuningData)
++namespace {
++
++constexpr float kLensPositionMax = 10.0f;
++
++} /* namespace */
++
++int Af::init(IPAContext &context, const ValueNode &tuningData)
+ {
+ 	coarseStep_ = tuningData["coarseStep"].get<int32_t>(48);
+ 	fineStep_ = tuningData["fineStep"].get<int32_t>(6);
+ 	startPosition_ = tuningData["startPosition"].get<int32_t>(120);
+ 	maxPosition_ = tuningData["maxPosition"].get<int32_t>(0);
++	farPosition_ = tuningData["farPosition"].get<int32_t>(-1);
++	macroPosition_ = tuningData["macroPosition"].get<int32_t>(-1);
+ 	settle_ = tuningData["settle"].get<uint32_t>(1);
+ 	improve_ = tuningData["improve"].get<double>(1.02);
+ 	rescan_ = tuningData["rescan"].get<double>(1.5);
+@@ -45,6 +62,22 @@
+ 	coarseStep_ = std::max(coarseStep_, 1);
+ 	fineStep_ = std::clamp(fineStep_, 1, coarseStep_);
+ 
++	mode_ = Mode::Continuous;
++
++	if (!context.configuration.af.available)
++		return 0;
++
++	context.ctrlMap[&controls::AfMode] =
++		ControlInfo(static_cast<int32_t>(controls::AfModeManual),
++			    static_cast<int32_t>(controls::AfModeContinuous),
++			    static_cast<int32_t>(controls::AfModeContinuous));
++	context.ctrlMap[&controls::AfTrigger] =
++		ControlInfo(static_cast<int32_t>(controls::AfTriggerStart),
++			    static_cast<int32_t>(controls::AfTriggerCancel),
++			    static_cast<int32_t>(controls::AfTriggerCancel));
++	context.ctrlMap[&controls::LensPosition] =
++		ControlInfo(0.0f, kLensPositionMax, 1.0f);
++
+ 	return 0;
+ }
+ 
+@@ -58,6 +91,10 @@
+ 	max_ = context.configuration.af.max;
+ 	if (maxPosition_ > min_)
+ 		max_ = std::min(max_, maxPosition_);
++	if (farPosition_ < 0)
++		farPosition_ = min_;
++	if (macroPosition_ < 0)
++		macroPosition_ = max_;
+ 
+ 	/* The camera is most likely pointed at the same kind of scene again. */
+ 	const int32_t start = lastLocked_.value_or(startPosition_);
+@@ -66,11 +103,92 @@
+ 		<< "Lens positions " << min_ << "-" << max_
+ 		<< ", starting at " << start;
+ 
++	mode_ = Mode::Continuous;
++	held_ = false;
+ 	startSearch(context, start);
+ 
+ 	return 0;
+ }
+ 
++int32_t Af::fromLensPosition(float lensPosition) const
++{
++	const float f = std::clamp(lensPosition, 0.0f, kLensPositionMax) / kLensPositionMax;
++	return farPosition_ + static_cast<int32_t>(f * (macroPosition_ - farPosition_));
++}
++
++float Af::toLensPosition(int32_t position) const
++{
++	if (macroPosition_ == farPosition_)
++		return 0.0f;
++
++	const float f = static_cast<float>(position - farPosition_) /
++			(macroPosition_ - farPosition_);
++	return std::clamp(f, 0.0f, 1.0f) * kLensPositionMax;
++}
++
++void Af::queueRequest(IPAContext &context,
++		      [[maybe_unused]] const uint32_t frame,
++		      [[maybe_unused]] IPAFrameContext &frameContext,
++		      const ControlList &controls)
++{
++	if (!context.configuration.af.available)
++		return;
++
++	const auto &afMode = controls.get(controls::AfMode);
++	if (afMode) {
++		Mode mode = Mode::Continuous;
++		if (*afMode == controls::AfModeManual)
++			mode = Mode::Manual;
++		else if (*afMode == controls::AfModeAuto)
++			mode = Mode::Auto;
++
++		if (mode != mode_) {
++			LOG(IPASoftAf, Debug) << "Mode " << *afMode;
++			mode_ = mode;
++
++			/*
++			 * Applications may send the trigger just before they
++			 * switch to the auto mode: a trigger that is still held
++			 * counts for the new mode.
++			 */
++			if (mode_ == Mode::Continuous) {
++				held_ = false;
++				startSearch(context, position_);
++			} else if (mode_ == Mode::Auto && held_) {
++				startSearch(context, position_);
++			} else {
++				held_ = false;
++				state_ = State::Idle;
++			}
++		}
++	}
++
++	const auto &lensPosition = controls.get(controls::LensPosition);
++	if (lensPosition && mode_ == Mode::Manual) {
++		const int32_t position = fromLensPosition(*lensPosition);
++		if (position != position_)
++			moveTo(context, position);
++	}
++
++	const auto &afTrigger = controls.get(controls::AfTrigger);
++	if (!afTrigger || mode_ == Mode::Manual)
++		return;
++
++	LOG(IPASoftAf, Debug)
++		<< "Trigger " << *afTrigger << (held_ ? ", focus held" : "");
++
++	if (*afTrigger == controls::AfTriggerStart) {
++		/* Hold the focus once it is found, until the trigger is cancelled. */
++		if (!held_ && mode_ == Mode::Auto)
++			startSearch(context, position_);
++		held_ = true;
++	} else if (*afTrigger == controls::AfTriggerCancel) {
++		held_ = false;
++		if (mode_ == Mode::Auto)
++			state_ = State::Idle;
++	}
++}
++
+ /* Contrast, made independent of the exposure with the mean luminance. */
+ double Af::contrast(const SwIspStats *stats) const
+ {
+@@ -181,6 +299,10 @@
+ 		return;
+ 	}
+ 
++	/* Only the continuous mode follows the scene, unless the focus is held. */
++	if (mode_ != Mode::Continuous || held_)
++		return;
++
+ 	if (value > locked_ * rescan_ || value * rescan_ < locked_) {
+ 		changed_++;
+ 	} else {
+@@ -202,25 +324,35 @@
+ 		 [[maybe_unused]] const uint32_t frame,
+ 		 [[maybe_unused]] IPAFrameContext &frameContext,
+ 		 const SwIspStats *stats,
+-		 [[maybe_unused]] ControlList &metadata)
++		 ControlList &metadata)
+ {
+-	if (!context.configuration.af.available || !stats->valid)
++	if (!context.configuration.af.available)
+ 		return;
+ 
+-	if (wait_) {
+-		wait_--;
+-		return;
++	if (stats->valid) {
++		if (wait_) {
++			wait_--;
++		} else if (state_ != State::Idle) {
++			const double value = contrast(stats);
++
++			LOG(IPASoftAf, Debug)
++				<< "position " << position_ << " contrast " << value;
++
++			if (state_ == State::Search)
++				search(context, value);
++			else
++				monitor(context, value);
++		}
+ 	}
+ 
+-	const double value = contrast(stats);
+-
+-	LOG(IPASoftAf, Debug)
+-		<< "position " << position_ << " contrast " << value;
+-
++	int32_t afState = controls::AfStateIdle;
+ 	if (state_ == State::Search)
+-		search(context, value);
+-	else
+-		monitor(context, value);
++		afState = controls::AfStateScanning;
++	else if (state_ == State::Locked)
++		afState = controls::AfStateFocused;
++
++	metadata.set(controls::AfState, afState);
++	metadata.set(controls::LensPosition, toLensPosition(position_));
+ }
+ 
+ REGISTER_IPA_ALGORITHM(Af, "Af")
+--- a/src/ipa/simple/algorithms/af.h
++++ b/src/ipa/simple/algorithms/af.h
+@@ -1,6 +1,6 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ /*
+- * Contrast based continuous autofocus
++ * Contrast based autofocus
+  */
+ 
+ #pragma once
+@@ -22,19 +22,31 @@
+ 
+ 	int init(IPAContext &context, const ValueNode &tuningData) override;
+ 	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
++	void queueRequest(IPAContext &context, const uint32_t frame,
++			  IPAFrameContext &frameContext,
++			  const ControlList &controls) override;
+ 	void process(IPAContext &context, const uint32_t frame,
+ 		     IPAFrameContext &frameContext,
+ 		     const SwIspStats *stats,
+ 		     ControlList &metadata) override;
+ 
+ private:
++	enum class Mode {
++		Manual,
++		Auto,
++		Continuous,
++	};
++
+ 	enum class State {
++		Idle,
+ 		Search,
+ 		Locked,
+ 	};
+ 
+ 	double contrast(const SwIspStats *stats) const;
+ 	bool inRange(int32_t position) const;
++	int32_t fromLensPosition(float lensPosition) const;
++	float toLensPosition(int32_t position) const;
+ 	void moveTo(IPAContext &context, int32_t position);
+ 	void startSearch(IPAContext &context, int32_t position);
+ 	void search(IPAContext &context, double value);
+@@ -45,6 +57,8 @@
+ 	int32_t fineStep_;
+ 	int32_t startPosition_;
+ 	int32_t maxPosition_;
++	int32_t farPosition_;
++	int32_t macroPosition_;
+ 	unsigned int settle_;
+ 	double improve_;
+ 	double rescan_;
+@@ -54,6 +68,7 @@
+ 	int32_t min_;
+ 	int32_t max_;
+ 
++	Mode mode_;
+ 	State state_;
+ 	int32_t position_;
+ 	int32_t bestPosition_;
+@@ -62,6 +77,7 @@
+ 	bool advanced_;
+ 	bool reversed_;
+ 	bool lockPending_;
++	bool held_;
+ 	double best_;
+ 	double locked_;
+ 	unsigned int wait_;
+--- a/src/ipa/simple/soft_simple.cpp
++++ b/src/ipa/simple/soft_simple.cpp
+@@ -56,6 +56,7 @@
+ 		 const SharedFD &fdParams,
+ 		 const IPACameraSensorInfo &sensorInfo,
+ 		 const ControlInfoMap &sensorControls,
++		 const ControlInfoMap &lensControls,
+ 		 ControlInfoMap *ipaControls,
+ 		 bool *ccmEnabled) override;
+ 	int configure(const IPAConfigInfo &configInfo) override;
+@@ -98,6 +99,7 @@
+ 			const SharedFD &fdParams,
+ 			const IPACameraSensorInfo &sensorInfo,
+ 			const ControlInfoMap &sensorControls,
++			const ControlInfoMap &lensControls,
+ 			ControlInfoMap *ipaControls,
+ 			bool *ccmEnabled)
+ {
+@@ -110,6 +112,10 @@
+ 
+ 	context_.sensorInfo = sensorInfo;
+ 
++	/* The algorithms register their controls in init(). */
++	context_.configuration.af.available =
++		lensControls.find(V4L2_CID_FOCUS_ABSOLUTE) != lensControls.end();
++
+ 	/* Load the tuning data file */
+ 	File file(settings.configurationFile);
+ 	if (!file.open(File::OpenModeFlag::ReadOnly)) {
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -619,7 +619,10 @@
+ 	 * Instantiate Soft ISP if this is enabled for the given driver and no converter is used.
+ 	 */
+ 	if (!converter_ && pipe->swIspEnabled()) {
+-		swIsp_ = std::make_unique<SoftwareIsp>(pipe, sensor_.get(), &controlInfo_);
++		CameraLens *focusLens = sensor_->focusLens();
++		swIsp_ = std::make_unique<SoftwareIsp>(pipe, sensor_.get(), &controlInfo_,
++						       focusLens ? focusLens->controls()
++								 : ControlInfoMap());
+ 		if (!swIsp_->isValid()) {
+ 			LOG(SimplePipeline, Warning)
+ 				<< "Failed to create software ISP, disabling software debayering";
+--- a/src/libcamera/software_isp/software_isp.cpp
++++ b/src/libcamera/software_isp/software_isp.cpp
+@@ -76,11 +76,13 @@
+  * \brief Constructs SoftwareIsp object
+  * \param[in] pipe The pipeline handler in use
+  * \param[in] sensor Pointer to the CameraSensor instance owned by the pipeline
+- * \param[out] ipaControls The IPA controls to update
+  * handler
++ * \param[out] ipaControls The IPA controls to update
++ * \param[in] lensControls The controls of the focus lens, empty without lens
+  */
+ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+-			 ControlInfoMap *ipaControls)
++			 ControlInfoMap *ipaControls,
++			 const ControlInfoMap &lensControls)
+ 	: ispWorkerThread_("SWIspWorker"),
+ 	  dmaHeap_(DmaBufAllocator::DmaBufAllocatorFlag::CmaHeap |
+ 		   DmaBufAllocator::DmaBufAllocatorFlag::SystemHeap |
+@@ -162,6 +164,7 @@
+ 			 sharedParams_.fd(),
+ 			 sensorInfo,
+ 			 sensor->controls(),
++			 lensControls,
+ 			 ipaControls,
+ 			 &ccmEnabled_);
+ 	if (ret) {
