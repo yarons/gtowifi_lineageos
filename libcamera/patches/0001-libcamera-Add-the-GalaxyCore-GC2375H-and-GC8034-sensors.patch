@@ -1,0 +1,75 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: Add the GalaxyCore GC2375H and GC8034 sensors
+
+Sensor helper (linear analogue gain in 1/64 steps, black level 64 at 10 bits)
+and static properties for the two cameras of the Samsung Galaxy Tab A 8.0
+2019. Values from the kernel drivers and from raw frames of the tablet.
+---
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 9457d62b3..3f977f412 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -496,6 +496,32 @@ private:
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("ar0521", CameraSensorHelperAr0521)
+ 
++class CameraSensorHelperGc2375h : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperGc2375h()
++	{
++		/* 64 at 10 bits, measured on raw frames of an SM-T290. */
++		blackLevel_ = 4096;
++		/* The driver's analogue gain control is in 1/64 steps. */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 64 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("gc2375h", CameraSensorHelperGc2375h)
++
++class CameraSensorHelperGc8034 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperGc8034()
++	{
++		/* 64 at 10 bits, measured on raw frames of an SM-T290. */
++		blackLevel_ = 4096;
++		/* The driver's analogue gain control is in 1/64 steps. */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 64 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("gc8034", CameraSensorHelperGc8034)
++
+ class CameraSensorHelperGc05a2 : public CameraSensorHelper
+ {
+ public:
+diff --git a/src/libcamera/sensor/camera_sensor_properties.cpp b/src/libcamera/sensor/camera_sensor_properties.cpp
+index 28043150e..72953f814 100644
+--- a/src/libcamera/sensor/camera_sensor_properties.cpp
++++ b/src/libcamera/sensor/camera_sensor_properties.cpp
+@@ -106,6 +106,26 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 			},
+ 			.sensorDelays = { },
+ 		} },
++		{ "gc2375h", {
++			.unitCellSize = { 1750, 1750 },
++			.testPatternModes = {},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
++		{ "gc8034", {
++			.unitCellSize = { 1120, 1120 },
++			.testPatternModes = {},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "gc05a2", {
+ 			.unitCellSize = { 1120, 1120 },
+ 			.testPatternModes = {

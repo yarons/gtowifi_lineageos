@@ -131,5 +131,6 @@ DEVICE_MANIFEST_FILE := \
 
 # Cameras: libcamera through aospext, see libcamera/Android.mk
 BOARD_LIBCAMERA_SRC_DIR := external/libcamera-upstream
+BOARD_LIBCAMERA_PATCHES_DIRS := $(DEVICE_PATH)/libcamera/patches
 BOARD_LIBCAMERA_IPAS := simple
 BOARD_LIBCAMERA_PIPELINES := simple
