@@ -4,6 +4,10 @@ Subject: [PATCH] android: Assume 30 fps when the camera reports no frame duratio
 The simple pipeline handler with the software ISP has no
 FrameDurationLimits control; the HAL refused such cameras with "Camera does
 not report frame durations".
+
+The maximum duration is 1/15 s and not 1/30 s: the AE FPS range's lower bound
+is ceil(10^9 / maxFrameDuration), which is 31 for 33333333 ns and gives the
+invalid range [31, 30] that the Android framework asserts on.
 ---
 --- a/src/android/camera_capabilities.cpp
 +++ b/src/android/camera_capabilities.cpp
@@ -18,17 +22,17 @@ not report frame durations".
 +			/*
 +			 * Pipeline handlers without an ISP driver (the simple
 +			 * pipeline handler with the software ISP) do not
-+			 * report frame durations. Assume a fixed 30 frames per
++			 * report frame durations. Assume 15 to 30 frames per
 +			 * second instead of refusing the camera.
 +			 */
 +			int64_t minFrameDuration = 33333333;
-+			int64_t maxFrameDuration = 33333333;
++			int64_t maxFrameDuration = 66666667;
 +			if (frameDurations != controls.end()) {
 +				minFrameDuration = frameDurations->second.min().get<int64_t>() * 1000;
 +				maxFrameDuration = frameDurations->second.max().get<int64_t>() * 1000;
 +			} else {
 +				LOG(HAL, Warning)
-+					<< "Camera does not report frame durations, assuming 30 fps";
++					<< "Camera does not report frame durations, assuming 15-30 fps";
  			}
 -
 -			int64_t minFrameDuration = frameDurations->second.min().get<int64_t>() * 1000;
