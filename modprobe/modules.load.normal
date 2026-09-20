@@ -12,3 +12,37 @@ qcom_wcnss_pil
 rfkill
 wcn36xx
 wcnss_ctrl
+
+# ADSP (audio and sensors); firmware adsp.* comes from apnhlos
+qcom_q6v5
+qcom_q6v5_pas
+qcom_pd_mapper
+qcom_pdr_msg
+pdr_interface
+
+# Sensors behind the ADSP (QMI Sensor Manager over QRTR)
+qcom_sns_reg
+sns_smgr
+qcom_smgr
+qcom_smgr_accel
+qcom_smgr_gyro
+qcom_smgr_mag
+qcom_smgr_prox
+qcom_smgr_pressure
+
+# Audio: q6 services, PM8953 codec, AW87319 speaker amplifiers
+apr
+q6core
+q6afe
+q6afe-dai
+q6afe-clocks
+q6adm
+q6asm
+q6asm-dai
+q6routing
+snd-q6dsp-common
+snd-soc-msm8916-analog
+snd-soc-msm8916-digital
+snd-soc-apq8016-sbc
+snd-soc-aw87319
+snd-soc-simple-amplifier
