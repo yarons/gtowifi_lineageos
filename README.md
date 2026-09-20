@@ -54,7 +54,7 @@ other 12 are clang-only or exist only in the Android common kernel.
 | Display | bootloader framebuffer only; the SDM429 DSI needs a 12nm PHY driver that is not merged anywhere | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`) |
 | GPU (Adreno 504, driven as A505) | not enabled | - |
 | Audio (ADSP, PM8953 codec, 2x `aw87319`) | not described in the DTS; no `aw87319` driver | dummy HAL |
-| Battery, charging (PMI632) | no driver | fake battery |
+| Battery, charging (PMI632) | SMB5 charger + simple-battery (voltage based level, no coulomb counter) | health AIDL default |
 | Sensors (behind the ADSP) | `qcom_smgr` exists, needs the ADSP | - |
 | Suspend | off | off |
 | Camera, GNSS | nothing | nothing |

@@ -10,8 +10,9 @@ TARGET_QCOM_SOC := sdm429
 ## TODO: Bringup the corresponding hardware and remove the following definitions
 # Audio: ADSP + PM8953 codec + 2x aw87319 amplifier are not described in the DTS yet
 TARGET_AUDIO_HAL := default-aidl
-# Battery: no PMI632 charger / fuel gauge driver in the kernel
-TARGET_HEALTH_HAL := cuttlefish
+# Battery: PMI632 SMB5 charger + simple-battery (kernel gtowifi/integration) show up as
+# /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
+TARGET_HEALTH_HAL := default-aidl
 TARGET_SUPPORTS_SUSPEND := false
 # Display: 12nm DSI PHY is not in the kernel, lk2nd's framebuffer is all there is
 TARGET_USES_FRAMEBUFFER_DISPLAY := true
