@@ -13,8 +13,12 @@
             <!-- Speakers and headphones: 84 = 0 dB, 1 dB steps. Tried on hardware at 64 only. -->
             <ctl name="RX1 Digital Volume" val="80"/>
             <ctl name="RX2 Digital Volume" val="80"/>
-            <!-- Built-in microphone, 6 dB steps: 4 was too quiet for speech at arm's length -->
-            <ctl name="ADC1 Volume" val="7"/>
+            <!-- Built-in microphone, 6 dB steps. 6 is what the stock mixer paths use; the noise Yaron
+                 heard at 7 is mostly the raw microphone without the DSP's noise suppression, see
+                 audio_effects.xml. The high-pass filter of the decimator cuts rumble and handling noise. -->
+            <ctl name="ADC1 Volume" val="6"/>
+            <ctl name="TX1 HPF Cutoff" val="75Hz"/>
+            <ctl name="TX1 HPF Switch" val="1"/>
             <!-- Headset microphone -->
             <ctl name="ADC2 Volume" val="7"/>
             <ctl name="TX1 Digital Volume" val="84"/>

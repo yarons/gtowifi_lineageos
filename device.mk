@@ -5,6 +5,11 @@
 
 DEVICE_PATH := device/samsung/gtowifi_mainline
 
+# Audio effects with microphone pre-processing. PRODUCT_COPY_FILES: the first rule for a destination
+# wins, so this has to come before mainline/common's tinyhal option copies the platform default.
+PRODUCT_COPY_FILES += \
+    device/samsung/gtowifi_mainline/audio/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml
+
 # Inherit options from mainline/qcom-common
 TARGET_QCOM_SOC := sdm429
 ## TODO: Bringup the corresponding hardware and remove the following definitions
