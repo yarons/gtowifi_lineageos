@@ -68,8 +68,7 @@ PRODUCT_PACKAGES += \
     ueventd.gtowifi.rc
 
 PRODUCT_PACKAGES += \
-    use_memfd.rc \
-    zram.rc
+    use_memfd.rc
 
 # Kernel
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
