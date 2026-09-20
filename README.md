@@ -4,11 +4,12 @@ Device tree for the SM-T290 (`gtowifi`, Qualcomm SDM429) running a **mainline Li
 Samsung's 4.9 vendor kernel. Product name `gtowifi_mainline`. UNOFFICIAL, not affiliated with the
 official `gtowifi` LineageOS builds.
 
-> **State: skeleton. Never built, never booted.** Written on 2026-09-18 from the `mi439_mainline`
-> target of `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439: same kernel fork, same
-> lk2nd platform, same touchscreen and Wi-Fi/Bluetooth drivers). The only parts exercised so far are
-> the kernel configuration (resolved with kconfig) and the boot image layout (built with the real
-> `avbtool`, checked with `tools/check-boot-layout.py`).
+> **State: boots to the launcher from the eMMC (first boot 2026-09-20), software rendered, SELinux
+> permissive. Not a daily driver.** Derived from the `mi439_mainline` target of
+> `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439: same kernel fork, same lk2nd
+> platform, same touchscreen and Wi-Fi/Bluetooth drivers). Started with `fastboot boot` from lk2nd; the
+> combined boot image in the BOOT partition is still untried. See the hardware table for what was
+> actually seen working.
 
 It sits on LineageOS's mainline-kernel stack and adds nothing generic of its own:
 
@@ -27,7 +28,7 @@ eBPF features its 4.9 kernel does not have.
 
 | Path | URL | Branch |
 |---|---|---|
-| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux + `arch/arm64/boot/dts/qcom/sdm429-samsung-gtowifi.dts` (https://github.com/yarons/linux_msm89x7, `gtowifi/7.1.3`) | 7.1.3 |
+| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/battery` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and battery) | 7.1.3 |
 
 Patches needed on top, from `kernel/common-patches` (`main-kernel/android-mainline`), exactly as for the
 other msm89x7 targets of the stack:
@@ -47,18 +48,23 @@ other 12 are clang-only or exist only in the Android common kernel.
 
 ## Hardware
 
+Seen on the tablet on 2026-09-20 unless marked otherwise.
+
 | | Kernel | Android |
 |---|---|---|
-| Boot, eMMC, SD, USB gadget, touchscreen, keys | works | untested |
-| Wi-Fi, Bluetooth (WCN3660B) | works, firmware read from the tablet's `apnhlos` and `persist` partitions | untested |
-| Display | bootloader framebuffer only; the SDM429 DSI needs a 12nm PHY driver that is not merged anywhere | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`) |
+| Boot, eMMC, USB gadget (adb, MTP), touchscreen, keys | works | works |
+| SD card | works | untested |
+| Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. Unstable: `hal_join` fails on 2.4 GHz, a 5 GHz link dropped after seconds, the WCNSS firmware then crashed and did not recover. Suspected cause: the board DTS did not let drivers set regulator loads (fix under test) | scans and connects (WPA2); WPA2/WPA3 transition networks need the overlay in `overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
+| Bluetooth | works under postmarketOS | untested |
+| Display | bootloader framebuffer only; the SDM429 DSI needs a 12nm PHY driver that is not merged anywhere | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`, ANGLE on SwiftShader) |
 | GPU (Adreno 504, driven as A505) | not enabled | - |
-| Audio (ADSP, PM8953 codec, 2x `aw87319`) | not described in the DTS; no `aw87319` driver | dummy HAL |
-| Battery, charging (PMI632) | SMB5 charger + simple-battery (voltage based level, no coulomb counter) | health AIDL default |
-| Sensors (behind the ADSP) | `qcom_smgr` exists, needs the ADSP | - |
+| Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback was heard under postmarketOS | dummy HAL, no sound yet |
+| Battery, charging (PMI632) | SMB5 charger + battery (level from the open-circuit voltage, no coulomb counter yet) | real level, voltage, temperature and charger state through the default health AIDL HAL |
+| Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`) | sensors HAL (IIO) finds none yet: it starts before the IIO devices exist |
 | Suspend | off | off |
 | Camera, GNSS | nothing | nothing |
 | SELinux | | permissive |
+| RAM | | tight: about 70 MB free of 1.9 GB after boot |
 
 No proprietary files are part of the build. Radio, DSP and codec firmware is loaded from the tablet's
 own partitions; GPU microcode comes from linux-firmware.
