@@ -4,9 +4,9 @@ Subject: [PATCH] android: Accept gralloc handles with one fd per plane of the sa
 minigbm puts one file descriptor per plane into the buffer handle, all of
 them duplicates of the same dmabuf, and may add the descriptor of a metadata
 region after them. The generic CameraBuffer compared descriptor numbers and
-refused such handles ("Discontiguous planes are not supported"). Compare
-the underlying files instead, and ignore descriptors beyond the planes of
-the format.
+refused such handles ("Discontiguous planes are not supported"), also the
+blob buffers of JPEG streams. Use the first descriptor and ignore the
+others: the number of planes of the buffer is not known at that point.
 
 Also do not report an error when DMA_BUF_IOCTL_SYNC is sent to a buffer that
 is not a dmabuf: the HAL's internal buffers are anonymous memory.
@@ -31,22 +31,25 @@ is not a dmabuf: the HAL's internal buffers are anonymous memory.
  			continue;
  
  		if (fd_ != -1) {
+-			error_ = -EINVAL;
+-			LOG(HAL, Error) << "Discontiguous planes are not supported";
+-			return;
 +			/*
 +			 * minigbm stores one file descriptor per plane, all
-+			 * duplicates of the same dmabuf, possibly followed by
-+			 * the one of a metadata region that is not a plane.
++			 * duplicates of the same dmabuf, and may add the one of
++			 * a metadata region, which is not a plane. The number
++			 * of planes of the buffer is unknown here (a blob
++			 * buffer is described with the format of its source),
++			 * so descriptors of other files can only be ignored.
 +			 */
 +			struct stat st;
-+			if (!fstat(camera3Buffer->data[i], &st) &&
-+			    st.st_dev == fdStat.st_dev && st.st_ino == fdStat.st_ino)
-+				continue;
++			if (fstat(camera3Buffer->data[i], &st) ||
++			    st.st_dev != fdStat.st_dev || st.st_ino != fdStat.st_ino)
++				LOG(HAL, Debug)
++					<< "Ignoring file descriptor " << i
++					<< " of another file";
 +
-+			if (static_cast<unsigned int>(i) >= info.numPlanes())
-+				continue;
-+
- 			error_ = -EINVAL;
- 			LOG(HAL, Error) << "Discontiguous planes are not supported";
- 			return;
++			continue;
  		}
  
  		fd_ = camera3Buffer->data[i];
@@ -66,4 +69,3 @@ is not a dmabuf: the HAL's internal buffers are anonymous memory.
  		ret = errno;
  		LOG(DmaBufAllocator, Error)
  			<< "Unable to sync dma fd: " << fd_.get()
-

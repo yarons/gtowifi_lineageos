@@ -1,0 +1,26 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Mark the result metadata as complete whenever it is sent
+
+A request with a failed buffer (for example a JPEG that could not be
+encoded) was completed with result metadata but partial_result = 0. The
+camera service refuses that ("Result is malformed ... partial_result 0 must
+be 1 if partial result is not supported") and turns a recoverable buffer
+error into ERROR_CAMERA_DEVICE, which closes the camera.
+---
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -1390,7 +1390,13 @@
+ 		captureResult.num_output_buffers = resultBuffers.size();
+ 		captureResult.output_buffers = resultBuffers.data();
+ 
+-		if (descriptor->status_ == Camera3RequestDescriptor::Status::Success)
++		/*
++		 * The result metadata is complete whenever it is sent, also
++		 * for a request with a failed buffer. Leaving partial_result at
++		 * 0 then makes the camera service drop the result as malformed
++		 * and report a fatal device error.
++		 */
++		if (captureResult.result)
+ 			captureResult.partial_result = 1;
+ 
+ 		callbacks_->process_capture_result(callbacks_, &captureResult);
