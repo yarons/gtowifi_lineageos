@@ -1,0 +1,303 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Derive every YUV stream from one full size capture stream
+
+The software ISP crops instead of scaling: a 640x480 stream of its own is the
+centre of the sensor picture, a zoom of 2.5. It also writes with a stride
+equal to the width, which is not what gralloc gives for most sizes.
+
+- configureStreams() asks the camera for a single NV12 stream, at the size of
+  the JPEG stream if there is one and at the largest supported size
+  otherwise, captured into buffers of the HAL. All Android YUV streams are
+  Mapped streams; without JPEG stream the first of them stands for the
+  source.
+- The YUV post-processor scales the centre crop of the source that has the
+  aspect ratio of the destination (16:9 from a 4:3 sensor was stretched),
+  with the strides of the destination buffer.
+- The generic CameraBuffer takes the plane layout from minigbm buffer
+  handles (msm: stride aligned to 128, Y lines to 32).
+---
+--- a/src/android/camera_capabilities.cpp
++++ b/src/android/camera_capabilities.cpp
+@@ -485,6 +485,22 @@
+  * stream configurations to be reported to the Android camera framework through
+  * the camera static metadata.
+  */
++Size CameraCapabilities::maxYuvSize() const
++{
++	Size maxSize;
++
++	for (const Camera3StreamConfiguration &entry : streamConfigurations_) {
++		if (entry.androidFormat != HAL_PIXEL_FORMAT_YCbCr_420_888)
++			continue;
++
++		if (entry.resolution.width * entry.resolution.height >
++		    maxSize.width * maxSize.height)
++			maxSize = entry.resolution;
++	}
++
++	return maxSize;
++}
++
+ int CameraCapabilities::initializeStreamConfigurations()
+ {
+ 	/*
+--- a/src/android/camera_capabilities.h
++++ b/src/android/camera_capabilities.h
+@@ -38,6 +38,8 @@
+ 	std::unique_ptr<CameraMetadata> requestTemplateStill() const;
+ 	std::unique_ptr<CameraMetadata> requestTemplateVideo() const;
+ 
++	libcamera::Size maxYuvSize() const;
++
+ private:
+ 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraCapabilities)
+ 
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -711,41 +711,57 @@
+ 	sortCamera3StreamConfigs(streamConfigs, jpegStream);
+ 
+ 	/*
+-	 * A camera that produces a single processed stream (the simple pipeline
+-	 * handler with the software ISP) can't serve several NV12 streams.
+-	 * Capture only the largest NV12 stream, which
+-	 * sortCamera3StreamConfigs() has put first, and let the YUV
+-	 * post-processor scale the smaller ones down from it.
++	 * A camera that produces a single processed stream and crops instead of
++	 * scaling (the simple pipeline handler with the software ISP) can't
++	 * serve several NV12 streams, and gives a small stream only the centre
++	 * of the picture. Capture a single NV12 stream into a buffer of the HAL,
++	 * at the size of the JPEG stream if there is one and at the largest
++	 * supported size otherwise, and let the YUV post-processor crop and scale
++	 * every Android YUV stream from it. This also keeps the plane layout of
++	 * the gralloc buffers, which the camera does not know, out of its way.
+ 	 */
+-	if (streamConfigs.size() > 1 &&
++	if (!streamConfigs.empty() &&
+ 	    streamConfigs[0].config.pixelFormat == formats::NV12) {
+-		Camera3StreamConfig &largest = streamConfigs[0];
+-
+-		for (auto it = streamConfigs.begin() + 1; it != streamConfigs.end();) {
+-			bool yuvOnly = it->config.pixelFormat == formats::NV12 &&
+-				       std::all_of(it->streams.begin(), it->streams.end(),
+-						   [](const Camera3StreamConfig::Camera3Stream &s) {
+-							   return s.stream->format != HAL_PIXEL_FORMAT_BLOB;
+-						   });
+-			if (!yuvOnly ||
+-			    it->config.size.width > largest.config.size.width ||
+-			    it->config.size.height > largest.config.size.height) {
+-				++it;
+-				continue;
++		Size captureSize = capabilities_.maxYuvSize();
++		if (jpegStream)
++			captureSize = Size(jpegStream->width, jpegStream->height);
++
++		bool fits = !captureSize.isNull();
++		for (const Camera3StreamConfig &streamConfig : streamConfigs) {
++			if (streamConfig.config.pixelFormat != formats::NV12 ||
++			    streamConfig.config.size.width > captureSize.width ||
++			    streamConfig.config.size.height > captureSize.height)
++				fits = false;
++		}
++
++		if (fits) {
++			Camera3StreamConfig capture;
++			capture.config.size = captureSize;
++			capture.config.pixelFormat = formats::NV12;
++
++			/* The JPEG stream goes first: it becomes the source stream. */
++			if (jpegStream)
++				capture.streams.push_back({ jpegStream, CameraStream::Type::Internal });
++
++			for (const Camera3StreamConfig &streamConfig : streamConfigs) {
++				for (const Camera3StreamConfig::Camera3Stream &s : streamConfig.streams) {
++					if (s.stream == jpegStream)
++						continue;
++
++					s.stream->usage |= GRALLOC_USAGE_SW_WRITE_OFTEN;
++					capture.streams.push_back({ s.stream, CameraStream::Type::Mapped });
++				}
+ 			}
+ 
+ 			LOG(HAL, Info)
+-				<< it->config.size << " will be scaled down from "
+-				<< largest.config.size;
+-
+-			for (auto &s : it->streams) {
+-				s.stream->usage |= GRALLOC_USAGE_SW_WRITE_OFTEN;
+-				largest.streams.push_back({ s.stream, CameraStream::Type::Mapped });
+-			}
++				<< "Capturing " << captureSize << " for "
++				<< capture.streams.size() << " Android stream(s)";
+ 
+-			it = streamConfigs.erase(it);
++			streamConfigs.clear();
++			streamConfigs.push_back(std::move(capture));
+ 		}
+ 	}
++
+ 	for (const auto &streamConfig : streamConfigs) {
+ 		config->addConfiguration(streamConfig.config);
+ 
+@@ -764,8 +780,14 @@
+ 			 * be used when constructing the subsequent mapped
+ 			 * streams.
+ 			 */
++			/*
++			 * Without a Direct or Internal stream the first Mapped
++			 * stream stands for the source: it has no source stream
++			 * itself and is the one of the following streams.
++			 */
+ 			if (stream.type == CameraStream::Type::Direct ||
+-			    stream.type == CameraStream::Type::Internal)
++			    stream.type == CameraStream::Type::Internal ||
++			    !sourceStream)
+ 				sourceStream = &streams_.back();
+ 		}
+ 	}
+@@ -1133,7 +1155,8 @@
+ 		 * added to the request.
+ 		 */
+ 		CameraStream *sourceStream = cameraStream->sourceStream();
+-		ASSERT(sourceStream);
++		if (!sourceStream)
++			sourceStream = cameraStream;
+ 		if (requestedStreams.find(sourceStream) != requestedStreams.end())
+ 			continue;
+ 
+--- a/src/android/mm/generic_camera_buffer.cpp
++++ b/src/android/mm/generic_camera_buffer.cpp
+@@ -48,6 +48,7 @@
+ 	};
+ 
+ 	void map();
++	bool crosGrallocLayout(buffer_handle_t camera3Buffer);
+ 
+ 	int fd_;
+ 	int flags_;
+@@ -120,6 +121,9 @@
+ 	const unsigned int numPlanes = info.numPlanes();
+ 	planeInfo_.resize(numPlanes);
+ 
++	if (crosGrallocLayout(camera3Buffer))
++		return;
++
+ 	unsigned int offset = 0;
+ 	for (unsigned int i = 0; i < numPlanes; ++i) {
+ 		const unsigned int planeSize = info.planeSize(size, i);
+@@ -144,6 +148,51 @@
+ {
+ }
+ 
++/*
++ * minigbm (cros_gralloc) describes the planes in the buffer handle: after the
++ * file descriptors (an array of 5, of 4 in older versions) come the strides,
++ * the offsets and the sizes of up to 4 planes, further down a magic number and
++ * the number of planes. Use that when the handle is one of minigbm and has the
++ * number of planes of the format (a blob buffer has one): its layout is not
++ * the contiguous one assumed otherwise, for example for the msm driver
++ * (stride aligned to 128, lines of the Y plane to 32).
++ */
++bool CameraBuffer::Private::crosGrallocLayout(buffer_handle_t camera3Buffer)
++{
++	constexpr uint32_t kMagic = 0xabcddcba;
++	constexpr unsigned int kMaxPlanes = 4;
++	const unsigned int numData = camera3Buffer->numFds + camera3Buffer->numInts;
++
++	for (unsigned int maxFds : { kMaxPlanes + 1, kMaxPlanes }) {
++		const unsigned int magicIndex = maxFds + 3 * kMaxPlanes + 9;
++		const unsigned int numPlanesIndex = magicIndex + 5;
++
++		if (numData <= numPlanesIndex ||
++		    static_cast<uint32_t>(camera3Buffer->data[magicIndex]) != kMagic)
++			continue;
++
++		if (static_cast<uint32_t>(camera3Buffer->data[numPlanesIndex]) != planeInfo_.size())
++			return false;
++
++		const int *strides = &camera3Buffer->data[maxFds];
++		const int *offsets = strides + kMaxPlanes;
++		const int *sizes = offsets + kMaxPlanes;
++
++		for (unsigned int i = 0; i < planeInfo_.size(); ++i) {
++			if (bufferLength_ < static_cast<off_t>(offsets[i]) + sizes[i])
++				return false;
++
++			planeInfo_[i].stride = strides[i];
++			planeInfo_[i].offset = offsets[i];
++			planeInfo_[i].size = sizes[i];
++		}
++
++		return true;
++	}
++
++	return false;
++}
++
+ unsigned int CameraBuffer::Private::numPlanes() const
+ {
+ 	return planeInfo_.size();
+--- a/src/android/yuv/post_processor_yuv.cpp
++++ b/src/android/yuv/post_processor_yuv.cpp
+@@ -66,15 +66,23 @@
+ 		return;
+ 	}
+ 
+-	int ret = libyuv::NV12Scale(sourceMapped.planes()[0].data(),
+-				    sourceStride_[0],
+-				    sourceMapped.planes()[1].data(),
+-				    sourceStride_[1],
+-				    sourceSize_.width, sourceSize_.height,
++	/*
++	 * Scale the centre of the source that has the aspect ratio of the
++	 * destination, and use the strides of the destination buffer: gralloc
++	 * may align them.
++	 */
++	const uint8_t *srcY = sourceMapped.planes()[0].data() +
++			      crop_.y * sourceStride_[0] + crop_.x;
++	const uint8_t *srcUV = sourceMapped.planes()[1].data() +
++			       crop_.y / 2 * sourceStride_[1] + crop_.x;
++
++	int ret = libyuv::NV12Scale(srcY, sourceStride_[0],
++				    srcUV, sourceStride_[1],
++				    crop_.width, crop_.height,
+ 				    destination->plane(0).data(),
+-				    destinationStride_[0],
++				    destination->stride(0),
+ 				    destination->plane(1).data(),
+-				    destinationStride_[1],
++				    destination->stride(1),
+ 				    destinationSize_.width,
+ 				    destinationSize_.height,
+ 				    libyuv::FilterMode::kFilterBilinear);
+@@ -133,6 +141,20 @@
+ 	sourceSize_ = inCfg.size;
+ 	destinationSize_ = outCfg.size;
+ 
++	/* Centre crop with the aspect ratio of the destination, even numbers. */
++	crop_ = Rectangle(sourceSize_);
++	if (sourceSize_.width * destinationSize_.height >
++	    destinationSize_.width * sourceSize_.height)
++		crop_.width = sourceSize_.height * destinationSize_.width /
++			      destinationSize_.height;
++	else
++		crop_.height = sourceSize_.width * destinationSize_.height /
++			       destinationSize_.width;
++	crop_.width &= ~1U;
++	crop_.height &= ~1U;
++	crop_.x = (sourceSize_.width - crop_.width) / 2 & ~1U;
++	crop_.y = (sourceSize_.height - crop_.height) / 2 & ~1U;
++
+ 	const PixelFormatInfo &nv12Info = PixelFormatInfo::info(formats::NV12);
+ 	for (unsigned int i = 0; i < 2; i++) {
+ 		sourceStride_[i] = inCfg.stride;
+--- a/src/android/yuv/post_processor_yuv.h
++++ b/src/android/yuv/post_processor_yuv.h
+@@ -26,6 +26,7 @@
+ 	void calculateLengths(const libcamera::StreamConfiguration &inCfg,
+ 			      const libcamera::StreamConfiguration &outCfg);
+ 
++	libcamera::Rectangle crop_;
+ 	libcamera::Size sourceSize_;
+ 	libcamera::Size destinationSize_;
+ 	unsigned int sourceLength_[2] = {};
