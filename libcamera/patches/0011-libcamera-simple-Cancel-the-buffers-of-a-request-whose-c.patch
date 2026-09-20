@@ -1,0 +1,66 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: simple: Cancel the buffers of a request whose capture was cancelled
+
+When the capture buffer of a frame fails or is cancelled (every time the
+camera stops) and a converter or the software ISP is in use, the request
+at the head of the conversion queue is completed with its user-facing
+buffers untouched. Their metadata still says FrameSuccess, so the request
+completes as RequestComplete, with stale pictures and without
+SensorTimestamp.
+
+The Android HAL forwards that as a shutter notification with timestamp 0.
+The camera service never retires such a frame ("flushInflightRequests:
+Frame 191 | Timestamp: 0, metadata arrived: true, buffers left: 0"), and
+closing the camera waits for its 5 s drain timeout: switching between the
+cameras took 6 to 15 s. Mark the buffers as cancelled.
+
+Also return the buffers of the HAL when a request is aborted.
+---
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -952,9 +952,16 @@
+ {
+ 	notifyError(descriptor->frameNumber_, nullptr, CAMERA3_MSG_ERROR_REQUEST);
+ 
+-	for (auto &buffer : descriptor->buffers_)
++	for (auto &buffer : descriptor->buffers_) {
+ 		buffer.status = Camera3RequestDescriptor::Status::Error;
+ 
++		/* No post-processing will return the buffer of the HAL. */
++		if (buffer.internalBuffer) {
++			buffer.stream->putBuffer(buffer.internalBuffer);
++			buffer.internalBuffer = nullptr;
++		}
++	}
++
+ 	descriptor->status_ = Camera3RequestDescriptor::Status::Error;
+ }
+ 
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -42,6 +42,7 @@
+ #include "libcamera/internal/delayed_controls.h"
+ #include "libcamera/internal/device_enumerator.h"
+ #include "libcamera/internal/formats.h"
++#include "libcamera/internal/framebuffer.h"
+ #include "libcamera/internal/global_configuration.h"
+ #include "libcamera/internal/media_device.h"
+ #include "libcamera/internal/pipeline_handler.h"
+@@ -910,9 +911,16 @@
+ 		if (conversionQueue_.empty())
+ 			return;
+ 
++		/*
++		 * Nothing is written to the user-facing buffers: mark them as
++		 * cancelled, or the request completes as a successful one, with
++		 * stale pictures and without sensor timestamp.
++		 */
+ 		const RequestOutputs &outputs = conversionQueue_.front();
+-		for (auto &[stream, buf] : outputs.outputs)
++		for (auto &[stream, buf] : outputs.outputs) {
++			buf->_d()->cancel();
+ 			pipe->completeBuffer(outputs.request, buf);
++		}
+ 		SimpleFrameInfo *info = frameInfo_.find(outputs.request->sequence());
+ 		if (info)
+ 			info->metadataRequired = false;
