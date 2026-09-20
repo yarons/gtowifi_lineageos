@@ -1,0 +1,54 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Accept adjusted configurations that keep format and size
+
+The HAL refuses every configuration for which validate() returns Adjusted.
+The simple pipeline handler returns Adjusted when it fills in the buffer
+count, which the HAL never sets, so no stream configuration was ever
+accepted ("Set of requested inputs/outputs not supported by HAL"). Refuse
+only when a pixel format or a size was changed.
+---
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -728,16 +728,40 @@
+ 		}
+ 	}
+ 
++	/* Remember what was asked for, see the Adjusted case below. */
++	std::vector<std::pair<PixelFormat, Size>> requested;
++	for (const StreamConfiguration &cfg : *config)
++		requested.emplace_back(cfg.pixelFormat, cfg.size);
++
+ 	switch (config->validate()) {
+ 	case CameraConfiguration::Valid:
+ 		break;
+-	case CameraConfiguration::Adjusted:
++	case CameraConfiguration::Adjusted: {
++		/*
++		 * Pipeline handlers also report changes to fields the HAL does
++		 * not set as an adjustment: the simple pipeline handler does so
++		 * for the buffer count it picks. Only a different pixel format
++		 * or size makes the configuration unusable for Android.
++		 */
++		bool changed = false;
++		unsigned int i = 0;
++		for (const StreamConfiguration &cfg : *config) {
++			if (cfg.pixelFormat != requested[i].first ||
++			    cfg.size != requested[i].second)
++				changed = true;
++			i++;
++		}
++
++		if (!changed)
++			break;
++
+ 		LOG(HAL, Info) << "Camera configuration adjusted";
+ 
+ 		for (const StreamConfiguration &cfg : *config)
+ 			LOG(HAL, Info) << " - " << cfg.toString();
+ 
+ 		return -EINVAL;
++	}
+ 	case CameraConfiguration::Invalid:
+ 		LOG(HAL, Info) << "Camera configuration invalid";
+ 		return -EINVAL;
+
