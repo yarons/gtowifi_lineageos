@@ -9,8 +9,8 @@ mandatory Android format IMPLEMENTATION_DEFINED").
 Debayer into an intermediate XBGR8888 frame and convert it to NV12 (full
 range BT.601, chroma averaged over 2x2 blocks) when NV12 is requested.
 ---
---- a/src/libcamera/software_isp/debayer_cpu.cpp	2026-09-20 18:04:36
-+++ b/src/libcamera/software_isp/debayer_cpu.cpp	2026-09-20 18:04:36
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
 @@ -437,7 +437,8 @@
  						   formats::ARGB8888,
  						   formats::BGR888,
@@ -173,8 +173,8 @@ range BT.601, chroma averaged over 2x2 blocks) when NV12 is requested.
  
  	dmaSyncers.clear();
  
---- a/src/libcamera/software_isp/debayer_cpu.h	2026-09-20 18:04:36
-+++ b/src/libcamera/software_isp/debayer_cpu.h	2026-09-20 18:04:36
+--- a/src/libcamera/software_isp/debayer_cpu.h
++++ b/src/libcamera/software_isp/debayer_cpu.h
 @@ -21,6 +21,7 @@
  #include <libcamera/camera_manager.h>
  

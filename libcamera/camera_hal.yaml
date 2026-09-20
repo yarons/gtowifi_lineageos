@@ -1,10 +1,11 @@
 # libcamera's Android camera HAL refuses internal cameras that are not listed here
 # ("HAL configuration file is mandatory for internal cameras"). The ids are the sensors' device tree
-# paths, as printed by `cam -l`; location and rotation match what the sensor drivers report.
+# paths, as printed by `cam -l`. Rotation is libcamera's (counter-clockwise correction), i.e. what
+# the HAL derives from the sensors' V4L2 rotation of 90 (rear) and 270 (front).
 cameras:
   "/base/soc@0/cci@1b0c000/i2c-bus@0/camera-sensor@37":
     location: back
-    rotation: 90
+    rotation: 270
   "/base/soc@0/cci@1b0c000/i2c-bus@1/camera-sensor@17":
     location: front
-    rotation: 270
+    rotation: 90
