@@ -69,7 +69,7 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
  };
 --- a/src/ipa/simple/algorithms/af.cpp
 +++ b/src/ipa/simple/algorithms/af.cpp
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,230 @@
 +/* SPDX-License-Identifier: LGPL-2.1-or-later */
 +/*
 + * Contrast based continuous autofocus
@@ -131,11 +131,14 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +	if (maxPosition_ > min_)
 +		max_ = std::min(max_, maxPosition_);
 +
++	/* The camera is most likely pointed at the same kind of scene again. */
++	const int32_t start = lastLocked_.value_or(startPosition_);
++
 +	LOG(IPASoftAf, Info)
 +		<< "Lens positions " << min_ << "-" << max_
-+		<< ", starting at " << startPosition_;
++		<< ", starting at " << start;
 +
-+	startSearch(context, startPosition_);
++	startSearch(context, start);
 +
 +	return 0;
 +}
@@ -228,6 +231,7 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +			<< "Locked at " << bestPosition_ << ", contrast " << best_;
 +		state_ = State::Locked;
 +		lockPending_ = true;
++		lastLocked_ = bestPosition_;
 +		moveTo(context, bestPosition_);
 +		return;
 +	}
@@ -249,10 +253,13 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +		return;
 +	}
 +
-+	if (value > locked_ * rescan_ || value * rescan_ < locked_)
++	if (value > locked_ * rescan_ || value * rescan_ < locked_) {
 +		changed_++;
-+	else
++	} else {
++		/* Follow slow changes, of the light for example. */
++		locked_ = 0.8 * locked_ + 0.2 * value;
 +		changed_ = 0;
++	}
 +
 +	if (changed_ < rescanCount_)
 +		return;
@@ -295,7 +302,7 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +} /* namespace libcamera */
 --- a/src/ipa/simple/algorithms/af.h
 +++ b/src/ipa/simple/algorithms/af.h
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,76 @@
 +/* SPDX-License-Identifier: LGPL-2.1-or-later */
 +/*
 + * Contrast based continuous autofocus
@@ -303,6 +310,7 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +
 +#pragma once
 +
++#include <optional>
 +#include <stdint.h>
 +
 +#include "algorithm.h"
@@ -363,6 +371,9 @@ There is no application control yet (AfMode, AfTrigger, LensPosition).
 +	double locked_;
 +	unsigned int wait_;
 +	unsigned int changed_;
++
++	/* Where the last search ended, kept from one session to the next. */
++	std::optional<int32_t> lastLocked_;
 +};
 +
 +} /* namespace ipa::soft::algorithms */

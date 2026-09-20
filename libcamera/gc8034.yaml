@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Tuning of libcamera's software ISP IPA ("simple") for the rear camera, GalaxyCore GC8034 with a
+# Giantec GT9772 lens driver. Same as libcamera's uncalibrated.yaml plus the autofocus parameters:
+# found on the tablet, the lens is sharp between about 320 and 360 for one to two metres; a search
+# that starts at 120 and waits an extra statistics cycle after every move took four seconds.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+  - Awb:
+  - Adjust:
+  - Agc:
+  - Af:
+      startPosition: 320
+      coarseStep: 48
+      fineStep: 12
+      settle: 0
+...

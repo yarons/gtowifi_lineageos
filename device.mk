@@ -71,6 +71,7 @@ PRODUCT_VENDOR_PROPERTIES += \
 
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/libcamera/camera_hal.yaml:$(TARGET_COPY_OUT_VENDOR)/etc/libcamera/camera_hal.yaml \
+    $(DEVICE_PATH)/libcamera/gc8034.yaml:$(TARGET_COPY_OUT_VENDOR)/etc/shared/libcamera/ipa/simple/gc8034.yaml \
     frameworks/native/data/etc/android.hardware.camera.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.xml \
     frameworks/native/data/etc/android.hardware.camera.front.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.front.xml
 
