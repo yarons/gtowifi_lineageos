@@ -83,6 +83,9 @@ and run `fastboot boot`. The installed OS is not touched.
     sudo device/samsung/gtowifi_mainline/tools/partition-sdcard.sh /dev/sdX
     fastboot boot $OUT/boot.img.mkbootimg
 
+No Linux machine for `partition-sdcard.sh`? `tools/make-sdcard-image.sh <image dir>` assembles the same layout
+into one raw file (7.2 GiB, fits any 8 GB card) that can be written with `dd` from any OS.
+
 `boot.img.mkbootimg` is header v2 and needs an lk2nd built with `OSVERSION_IN_BOOTIMAGE=1` (the one this
 tree builds). lk2nd release binaries only read header v0 with an appended DTB:
 `tools/make-fastboot-boot-img.sh` repacks the image for them.
