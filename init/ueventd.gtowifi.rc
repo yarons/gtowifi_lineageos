@@ -7,3 +7,16 @@
 firmware_directories /vendor/firmware_mnt/image/ /odm/firmware/
 
 modalias_handling enabled
+
+# Sensors: the sensors HAL (user system) streams from the IIO devices of the ADSP's sensor manager
+# (qcom_smgr). The kernel creates them root-only.
+/dev/iio:device*    0660   system   system
+/sys/bus/iio/devices/iio:device*    buffer/enable                       0660   system   system
+/sys/bus/iio/devices/iio:device*    buffer/length                       0660   system   system
+/sys/bus/iio/devices/iio:device*    scan_elements/in_accel_x_en         0660   system   system
+/sys/bus/iio/devices/iio:device*    scan_elements/in_accel_y_en         0660   system   system
+/sys/bus/iio/devices/iio:device*    scan_elements/in_accel_z_en         0660   system   system
+/sys/bus/iio/devices/iio:device*    scan_elements/in_proximity_en       0660   system   system
+/sys/bus/iio/devices/iio:device*    scan_elements/in_timestamp_en       0660   system   system
+/sys/bus/iio/devices/iio:device*    in_accel_sampling_frequency         0660   system   system
+/sys/bus/iio/devices/iio:device*    in_proximity_sampling_frequency     0660   system   system

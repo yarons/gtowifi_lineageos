@@ -26,3 +26,11 @@ on property:sys.bootstat.first_boot_completed=1
 on post-fs
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -s -d /vendor/lib/modules --all=/vendor/etc/modules.load.normal
     trigger start_all_remoteproc
+
+# Sensors
+# The accelerometer and proximity sensor are IIO devices of the ADSP's sensor manager; they appear a
+# few seconds after the ADSP has started, which is after the sensors HAL has enumerated /sys/bus/iio
+# (it does that once, when it starts). Start it again as soon as the accelerometer driver is bound.
+on property:vendor.remoteproc.adsp.is_started=1
+    wait /sys/bus/platform/drivers/qcom_smgr_accel/qcom-smgr-accel.0 10
+    restart vendor.sensors-hal-multihal

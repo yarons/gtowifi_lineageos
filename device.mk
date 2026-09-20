@@ -16,7 +16,7 @@ TARGET_HEALTH_HAL := default-aidl
 TARGET_SUPPORTS_SUSPEND := false
 # Display: 12nm DSI PHY is not in the kernel, lk2nd's framebuffer is all there is
 TARGET_USES_FRAMEBUFFER_DISPLAY := true
-# Sensors: accelerometer/gyro sit behind the ADSP; the kernel exposes them as IIO devices through
+# Sensors: accelerometer and proximity sit behind the ADSP; the kernel exposes them as IIO devices through
 # IIO_QCOM_SMGR_* once the ADSP runs and has its registry (persist/sensors/sns.reg)
 TARGET_SENSORS_HAL := iio
 include device/mainline/qcom-common/optional/options.mk
@@ -91,8 +91,7 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/emulated_storage.mk)
 
 # Sensors
 PRODUCT_PACKAGES += \
-    android.hardware.sensor.accelerometer.prebuilt.xml \
-    android.hardware.sensor.gyroscope.prebuilt.xml
+    android.hardware.sensor.accelerometer.prebuilt.xml
 
 # Shipping API level
 PRODUCT_SHIPPING_API_LEVEL := 33
