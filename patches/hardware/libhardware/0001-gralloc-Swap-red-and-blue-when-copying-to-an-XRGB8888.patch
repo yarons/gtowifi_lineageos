@@ -1,0 +1,51 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] gralloc: Swap red and blue when copying to an XRGB8888 framebuffer
+
+SurfaceFlinger renders the client target as RGBA_8888 no matter which format
+the framebuffer HAL reports. When the framebuffer cannot page flip, fb_post()
+copies that buffer with memcpy(). DRM's fbdev emulation (simpledrm on the
+lk2nd framebuffer) always offers XRGB8888, which is B-G-R-X in memory, so red
+and blue end up swapped on the panel while screenshots look right.
+
+Seen on the Samsung Galaxy Tab A 8.0 2019 (gtowifi_mainline): gralloc reports
+r=16:8 g=8:8 b=0:8, "page flipping not supported".
+
+Swap the two channels while copying in that case.
+---
+--- a/modules/gralloc/framebuffer.cpp
++++ b/modules/gralloc/framebuffer.cpp
+@@ -71,6 +71,21 @@
+     return 0;
+ }
+ 
++/*
++ * SurfaceFlinger always renders the client target as RGBA_8888 (R-G-B-A in memory). A framebuffer
++ * that reports red at bit 16 (XRGB8888: B-G-R-X in memory, what DRM's fbdev emulation always
++ * offers) would show red and blue swapped after a plain memcpy.
++ */
++static void copy_swap_red_blue(void* dst, const void* src, size_t bytes)
++{
++    const uint32_t* s = static_cast<const uint32_t*>(src);
++    uint32_t* d = static_cast<uint32_t*>(dst);
++    for (size_t i = 0; i < bytes / sizeof(uint32_t); i++) {
++        const uint32_t p = s[i];
++        d[i] = (p & 0xff00ff00u) | ((p & 0x00ff0000u) >> 16) | ((p & 0x000000ffu) << 16);
++    }
++}
++
+ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
+ {
+     if (private_handle_t::validate(buffer) < 0)
+@@ -108,7 +123,11 @@
+                 0, 0, m->info.xres, m->info.yres,
+                 &buffer_vaddr);
+ 
+-        memcpy(fb_vaddr, buffer_vaddr, m->finfo.line_length * m->info.yres);
++        const size_t bytes = m->finfo.line_length * m->info.yres;
++        if (m->info.bits_per_pixel == 32 && m->info.red.offset == 16 && m->info.blue.offset == 0)
++            copy_swap_red_blue(fb_vaddr, buffer_vaddr, bytes);
++        else
++            memcpy(fb_vaddr, buffer_vaddr, bytes);
+         
+         m->base.unlock(&m->base, buffer); 
+         m->base.unlock(&m->base, m->framebuffer); 
