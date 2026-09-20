@@ -1,0 +1,69 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Accept gralloc handles with one fd per plane of the same buffer
+
+minigbm puts one file descriptor per plane into the buffer handle, all of
+them duplicates of the same dmabuf, and may add the descriptor of a metadata
+region after them. The generic CameraBuffer compared descriptor numbers and
+refused such handles ("Discontiguous planes are not supported"). Compare
+the underlying files instead, and ignore descriptors beyond the planes of
+the format.
+
+Also do not report an error when DMA_BUF_IOCTL_SYNC is sent to a buffer that
+is not a dmabuf: the HAL's internal buffers are anonymous memory.
+---
+--- a/src/android/mm/generic_camera_buffer.cpp
++++ b/src/android/mm/generic_camera_buffer.cpp
+@@ -8,6 +8,7 @@
+ #include "../camera_buffer.h"
+ 
+ #include <sys/mman.h>
++#include <sys/stat.h>
+ #include <unistd.h>
+ 
+ #include <libcamera/base/log.h>
+@@ -75,17 +76,32 @@
+ 	 * now that the buffer is backed by a single dmabuf, with planes being
+ 	 * stored contiguously.
+ 	 */
++	struct stat fdStat = {};
+ 	for (int i = 0; i < camera3Buffer->numFds; i++) {
+ 		if (camera3Buffer->data[i] == -1 || camera3Buffer->data[i] == fd_)
+ 			continue;
+ 
+ 		if (fd_ != -1) {
++			/*
++			 * minigbm stores one file descriptor per plane, all
++			 * duplicates of the same dmabuf, possibly followed by
++			 * the one of a metadata region that is not a plane.
++			 */
++			struct stat st;
++			if (!fstat(camera3Buffer->data[i], &st) &&
++			    st.st_dev == fdStat.st_dev && st.st_ino == fdStat.st_ino)
++				continue;
++
++			if (static_cast<unsigned int>(i) >= info.numPlanes())
++				continue;
++
+ 			error_ = -EINVAL;
+ 			LOG(HAL, Error) << "Discontiguous planes are not supported";
+ 			return;
+ 		}
+ 
+ 		fd_ = camera3Buffer->data[i];
++		fstat(fd_, &fdStat);
+ 	}
+ 
+ 	if (fd_ == -1) {
+--- a/src/libcamera/dma_buf_allocator.cpp
++++ b/src/libcamera/dma_buf_allocator.cpp
+@@ -344,7 +344,8 @@
+ 		ret = ioctl(fd_.get(), DMA_BUF_IOCTL_SYNC, &sync);
+ 	} while (ret && (errno == EINTR || errno == EAGAIN));
+ 
+-	if (ret) {
++	/* ENOTTY: not a dmabuf (anonymous memory), nothing to synchronise. */
++	if (ret && errno != ENOTTY) {
+ 		ret = errno;
+ 		LOG(DmaBufAllocator, Error)
+ 			<< "Unable to sync dma fd: " << fd_.get()
+
