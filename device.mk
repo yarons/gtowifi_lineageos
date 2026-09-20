@@ -8,8 +8,8 @@ DEVICE_PATH := device/samsung/gtowifi_mainline
 # Inherit options from mainline/qcom-common
 TARGET_QCOM_SOC := sdm429
 ## TODO: Bringup the corresponding hardware and remove the following definitions
-# Audio: ADSP + PM8953 codec + 2x aw87319 amplifier are not described in the DTS yet
-TARGET_AUDIO_HAL := default-aidl
+# Audio: tinyhal (the default of mainline/qcom-common) on the ADSP + PM8953 codec + 2x aw87319 sound
+# card; mixer paths in audio/audio.gtowifi_mainline.xml
 # Battery: PMI632 SMB5 charger + simple-battery (kernel gtowifi/integration) show up as
 # /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
 TARGET_HEALTH_HAL := default-aidl
@@ -27,6 +27,10 @@ $(call inherit-product, device/mainline/qcom-common/mainline_qcom-common.mk)
 # AAPT
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
+
+# Audio
+PRODUCT_PACKAGES += \
+    audio.gtowifi_mainline.xml
 
 # Bluetooth
 # Class of Device: service 0x1A (networking, capturing, object transfer), major 1 (computer),
