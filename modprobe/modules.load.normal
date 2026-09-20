@@ -46,3 +46,7 @@ snd-soc-msm8916-digital
 snd-soc-apq8016-sbc
 snd-soc-aw87319
 snd-soc-simple-amplifier
+i2c_qcom_cci
+qcom_camss
+gc8034
+gc2375h

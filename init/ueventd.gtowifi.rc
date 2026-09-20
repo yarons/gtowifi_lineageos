@@ -20,3 +20,8 @@ modalias_handling enabled
 /sys/bus/iio/devices/iio:device*    scan_elements/in_timestamp_en       0660   system   system
 /sys/bus/iio/devices/iio:device*    in_accel_sampling_frequency         0660   system   system
 /sys/bus/iio/devices/iio:device*    in_proximity_sampling_frequency     0660   system   system
+
+# Cameras: media controller graph of CAMSS (sensor -> csiphy -> csid -> ispif -> vfe), used by libcamera
+/dev/media*         0660   system   camera
+/dev/video*         0660   system   camera
+/dev/v4l-subdev*    0660   system   camera

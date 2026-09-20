@@ -38,6 +38,11 @@ PRODUCT_AAPT_PREF_CONFIG := hdpi
 PRODUCT_PACKAGES += \
     audio.gtowifi_mainline.xml
 
+# tinyhal reports its default capture period to AudioFlinger before the PCM is open. The default
+# (256 frames) makes the record thread a "fast capture" one, and those refuse software effects
+# ("non HW effect Noise Suppression on record thread ... in fast mode"): 1024 frames = 21 ms.
+$(call soong_config_set,tinyhal,in_period_size_default,1024)
+
 # Bluetooth
 # Class of Device: service 0x1A (networking, capturing, object transfer), major 1 (computer),
 # minor 0x1C (tablet)
