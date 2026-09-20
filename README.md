@@ -54,17 +54,17 @@ Seen on the tablet on 2026-09-20 unless marked otherwise.
 |---|---|---|
 | Boot, eMMC, USB gadget (adb, MTP), touchscreen, keys | works | works |
 | SD card | works | untested |
-| Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. Unstable: `hal_join` fails on 2.4 GHz, a 5 GHz link dropped after seconds, the WCNSS firmware then crashed and did not recover. Suspected cause: the board DTS did not let drivers set regulator loads (fix under test) | scans and connects (WPA2); WPA2/WPA3 transition networks need the overlay in `overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
+| Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. 5 GHz works. Joining a 2.4 GHz BSS is rejected by the firmware (`hal_join`/`hal_config_bss` -5), and after such a failed join the next 5 GHz link drops within seconds; open kernel issue. `qcom,wcn3680` as iris variant is wrong for this unit | connects (WPA2); WPA2/WPA3 transition networks need the overlay in `rro_overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
 | Bluetooth | works under postmarketOS | untested |
-| Display | bootloader framebuffer only; the SDM429 DSI needs a 12nm PHY driver that is not merged anywhere | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`, ANGLE on SwiftShader) |
+| Display | bootloader framebuffer through simpledrm; a driver for the SDM429 12nm DSI PHY + panel exists in the kernel bring-up tree, not used here yet | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`, ANGLE on SwiftShader). Needs `patches/hardware/libhardware` or red and blue are swapped. `system_server` sometimes times out waiting for the display at start and is restarted |
 | GPU (Adreno 504, driven as A505) | not enabled | - |
-| Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback was heard under postmarketOS | dummy HAL, no sound yet |
-| Battery, charging (PMI632) | SMB5 charger + battery (level from the open-circuit voltage, no coulomb counter yet) | real level, voltage, temperature and charger state through the default health AIDL HAL |
-| Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`) | sensors HAL (IIO) finds none yet: it starts before the IIO devices exist |
+| Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback and the built-in microphone work | tinyhal, `audio/audio.gtowifi_mainline.xml`: speakers work; microphone, headphone jack and headset untested |
+| Battery, charging (PMI632) | SMB5 charger + fuel gauge (level, voltage, OCV, current, charge) | real level, voltage, temperature and charger state through the default health AIDL HAL |
+| Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`); no gyroscope | IIO sensors HAL: both work, auto-rotate works. Needs the ueventd rules, the HAL restart after the ADSP is up and the axis properties of this tree |
 | Suspend | off | off |
 | Camera, GNSS | nothing | nothing |
 | SELinux | | permissive |
-| RAM | | tight: about 70 MB free of 1.9 GB after boot |
+| RAM | | tight (1.9 GB, software rendering in every process). zram needs the init script of this tree: `swapon_all` fails on current kernels |
 
 No proprietary files are part of the build. Radio, DSP and codec firmware is loaded from the tablet's
 own partitions; GPU microcode comes from linux-firmware.
