@@ -1,0 +1,203 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: software_isp: Add NV12 output to the CPU debayer
+
+The Android camera HAL needs NV12 for IMPLEMENTATION_DEFINED, YCbCr_420_888
+and as the source of its JPEG encoder; the software ISP only produces RGB, so
+the HAL drops every camera of the simple pipeline handler ("Failed to map
+mandatory Android format IMPLEMENTATION_DEFINED").
+
+Debayer into an intermediate XBGR8888 frame and convert it to NV12 (full
+range BT.601, chroma averaged over 2x2 blocks) when NV12 is requested.
+---
+--- a/src/libcamera/software_isp/debayer_cpu.cpp	2026-09-20 18:04:36
++++ b/src/libcamera/software_isp/debayer_cpu.cpp	2026-09-20 18:04:36
+@@ -437,7 +437,8 @@
+ 						   formats::ARGB8888,
+ 						   formats::BGR888,
+ 						   formats::XBGR8888,
+-						   formats::ABGR8888 };
++						   formats::ABGR8888,
++						   formats::NV12 };
+ 
+ 	if ((bayerFormat.bitDepth == 8 || bayerFormat.bitDepth == 10 || bayerFormat.bitDepth == 12) &&
+ 	    bayerFormat.packing == BayerFormat::Packing::None &&
+@@ -487,6 +488,12 @@
+ 		return 0;
+ 	}
+ 
++	if (outputFormat == formats::NV12) {
++		/* Debayered to XBGR8888 first, then converted. */
++		config.bpp = 12;
++		return 0;
++	}
++
+ 	LOG(Debayer, Info)
+ 		<< "Unsupported output format " << outputFormat.toString();
+ 	return -EINVAL;
+@@ -680,8 +687,19 @@
+ 		return -EINVAL;
+ 	}
+ 
++	nv12Output_ = outputCfg.pixelFormat == formats::NV12;
++	outputSize_ = outputCfg.size;
++	dstStride_ = outputConfig_.stride;
++	if (nv12Output_) {
++		dstStride_ = (outputCfg.size.width * 4 + 7) & ~7;
++		nv12Rgb_.resize(static_cast<size_t>(dstStride_) * outputCfg.size.height);
++	} else {
++		nv12Rgb_.clear();
++	}
++
+ 	int ret = setDebayerFunctions(inputCfg.pixelFormat,
+-				      outputCfg.pixelFormat,
++				      nv12Output_ ? PixelFormat(formats::XBGR8888)
++						  : outputCfg.pixelFormat,
+ 				      ccmEnabled);
+ 	if (ret != 0)
+ 		return -EINVAL;
+@@ -781,6 +799,12 @@
+ 	if (getOutputConfig(outputFormat, config) != 0)
+ 		return std::make_tuple(0, 0);
+ 
++	if (outputFormat == formats::NV12) {
++		/* One byte per luma sample, chroma plane of half the height. */
++		unsigned int nv12Stride = size.width;
++		return std::make_tuple(nv12Stride, nv12Stride * size.height * 3 / 2);
++	}
++
+ 	/* round up to multiple of 8 for 64 bits alignment */
+ 	unsigned int stride = (size.width * config.bpp / 8 + 7) & ~7;
+ 
+@@ -845,7 +869,7 @@
+ 	src += (window.y + yStart_) * debayer_->inputConfig_.stride +
+ 	       window.x * debayer_->inputConfig_.bpp / 8;
+ 	/* Adjust dst for yStart_ */
+-	dst += yStart_ * debayer_->outputConfig_.stride;
++	dst += yStart_ * debayer_->dstStride_;
+ 
+ 	if (debayer_->inputConfig_.patternSize.height == 2)
+ 		process2(frame, src, dst);
+@@ -860,7 +884,7 @@
+ 
+ void DebayerCpuThread::process2(uint32_t frame, const uint8_t *src, uint8_t *dst)
+ {
+-	unsigned int outputStride = debayer_->outputConfig_.stride;
++	unsigned int outputStride = debayer_->dstStride_;
+ 	unsigned int inputStride = debayer_->inputConfig_.stride;
+ 	Rectangle &window = debayer_->window_;
+ 	unsigned int yEnd = yEnd_;
+@@ -926,7 +950,7 @@
+ 
+ void DebayerCpuThread::process4(uint32_t frame, const uint8_t *src, uint8_t *dst)
+ {
+-	unsigned int outputStride = debayer_->outputConfig_.stride;
++	unsigned int outputStride = debayer_->dstStride_;
+ 	unsigned int inputStride = debayer_->inputConfig_.stride;
+ 
+ 	/*
+@@ -1065,6 +1089,47 @@
+ 	params_ = params;
+ }
+ 
++/*
++ * Convert the intermediate XBGR8888 frame (R, G, B, X in memory) to NV12, full
++ * range BT.601 (JFIF), which is what the Android camera HAL announces for its
++ * YUV and JPEG streams. Chroma is the average of each 2x2 block.
++ */
++void DebayerCpu::convertToNv12(MappedFrameBuffer &out)
++{
++	const unsigned int width = outputSize_.width;
++	const unsigned int height = outputSize_.height;
++	const unsigned int stride = outputConfig_.stride;
++	uint8_t *lumaPlane = out.planes()[0].data();
++	uint8_t *chromaPlane = out.planes().size() > 1
++			     ? out.planes()[1].data()
++			     : lumaPlane + static_cast<size_t>(stride) * height;
++
++	for (unsigned int y = 0; y < height; y++) {
++		const uint8_t *src = nv12Rgb_.data() + static_cast<size_t>(y) * dstStride_;
++		uint8_t *luma = lumaPlane + static_cast<size_t>(y) * stride;
++
++		for (unsigned int x = 0; x < width; x++, src += 4)
++			luma[x] = (77 * src[0] + 150 * src[1] + 29 * src[2] + 128) >> 8;
++	}
++
++	for (unsigned int y = 0; y + 1 < height; y += 2) {
++		const uint8_t *src0 = nv12Rgb_.data() + static_cast<size_t>(y) * dstStride_;
++		const uint8_t *src1 = src0 + dstStride_;
++		uint8_t *chroma = chromaPlane + static_cast<size_t>(y / 2) * stride;
++
++		for (unsigned int x = 0; x + 1 < width; x += 2, src0 += 8, src1 += 8) {
++			const int r = (src0[0] + src0[4] + src1[0] + src1[4] + 2) >> 2;
++			const int g = (src0[1] + src0[5] + src1[1] + src1[5] + 2) >> 2;
++			const int b = (src0[2] + src0[6] + src1[2] + src1[6] + 2) >> 2;
++			const int cb = ((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128;
++			const int cr = ((128 * r - 107 * g - 21 * b + 128) >> 8) + 128;
++
++			chroma[x] = std::clamp(cb, 0, 255);
++			chroma[x + 1] = std::clamp(cr, 0, 255);
++		}
++	}
++}
++
+ void DebayerCpu::process(uint32_t frame, FrameBuffer *input, FrameBuffer *output, const DebayerParams &params)
+ {
+ 	bench_.startFrame();
+@@ -1098,7 +1163,8 @@
+ 	for (auto &thread : threads_)
+ 		thread->invokeMethod(&DebayerCpuThread::process,
+ 				     ConnectionTypeQueued, frame,
+-				     in.planes()[0].data(), out.planes()[0].data());
++				     in.planes()[0].data(),
++				     nv12Output_ ? nv12Rgb_.data() : out.planes()[0].data());
+ 
+ 	{
+ 		MutexLocker locker(workPendingMutex_);
+@@ -1107,7 +1173,18 @@
+ 		});
+ 	}
+ 
+-	metadata.planes()[0].bytesused = out.planes()[0].size();
++	if (nv12Output_) {
++		convertToNv12(out);
++		const unsigned int lumaSize = outputConfig_.stride * outputSize_.height;
++		if (metadata.planes().size() > 1) {
++			metadata.planes()[0].bytesused = lumaSize;
++			metadata.planes()[1].bytesused = lumaSize / 2;
++		} else {
++			metadata.planes()[0].bytesused = outputConfig_.frameSize;
++		}
++	} else {
++		metadata.planes()[0].bytesused = out.planes()[0].size();
++	}
+ 
+ 	dmaSyncers.clear();
+ 
+--- a/src/libcamera/software_isp/debayer_cpu.h	2026-09-20 18:04:36
++++ b/src/libcamera/software_isp/debayer_cpu.h	2026-09-20 18:04:36
+@@ -21,6 +21,7 @@
+ #include <libcamera/camera_manager.h>
+ 
+ #include "libcamera/internal/bayer_format.h"
++#include "libcamera/internal/mapped_framebuffer.h"
+ #include "libcamera/internal/software_isp/debayer_params.h"
+ #include "libcamera/internal/software_isp/swstats_cpu.h"
+ 
+@@ -156,6 +157,17 @@
+ 	Rectangle window_;
+ 	std::unique_ptr<SwStatsCpu> stats_;
+ 	unsigned int xShift_; /* Offset of 0/1 applied to window_.x */
++
++	/*
++	 * NV12 output: the frame is debayered into an intermediate XBGR8888
++	 * frame and converted afterwards. dstStride_ is the line stride the
++	 * debayer threads write with.
++	 */
++	void convertToNv12(MappedFrameBuffer &out);
++	bool nv12Output_ = false;
++	unsigned int dstStride_ = 0;
++	Size outputSize_;
++	std::vector<uint8_t> nv12Rgb_;
+ 
+ 	static constexpr unsigned int kMinThreads = 1;
+ 	static constexpr unsigned int kMaxThreads = 8;

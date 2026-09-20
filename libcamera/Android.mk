@@ -31,8 +31,10 @@ LOCAL_SHARED_LIBRARIES := libc libdl libexif libjpeg libevent libcrypto libyuv
 LOCAL_STATIC_LIBRARIES := libyaml
 AOSPEXT_GEN_PKGCONFIGS := libexif libjpeg dl libevent_pthreads libcrypto yaml-0.1 libyuv
 
+# aospext configures with --buildtype=debug (-O0); the software ISP debayers every frame on the CPU
 MESON_BUILD_ARGUMENTS := \
     -Dwerror=false                                                       \
+    -Doptimization=2                                                     \
     -Dandroid=enabled                                                    \
     -Dandroid_platform=generic                                           \
     -Dipas=$(subst $(space),$(comma),$(BOARD_LIBCAMERA_IPAS))            \
