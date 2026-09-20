@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPDX-FileCopyrightText: The LineageOS Project
+    SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- wcn36xx has no management frame protection (802.11w). WPA3-SAE requires it, so an access
+         point in WPA2/WPA3 transition mode answers the association request with status 31 (robust
+         management frame policy violation) once Android has upgraded the saved PSK network to SAE.
+         Seen on the first boot: "wlan0: denied association (code=31)". Stay on WPA2-PSK. -->
+    <bool name="config_wifiSaeUpgradeEnabled">false</bool>
+    <bool name="config_wifiSaeUpgradeOffloadEnabled">false</bool>
+</resources>

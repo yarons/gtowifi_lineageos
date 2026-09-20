@@ -73,6 +73,10 @@ PRODUCT_PACKAGES += \
 DEVICE_PACKAGE_OVERLAYS += \
     $(DEVICE_PATH)/overlays/overlay
 
+# Overlays (runtime): the Wi-Fi resources live in an APEX, a static overlay does not reach them
+PRODUCT_PACKAGES += \
+    WifiOverlayGtowifiMainline
+
 # Permissions
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:$(TARGET_COPY_OUT_ODM)/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
