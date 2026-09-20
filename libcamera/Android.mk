@@ -26,7 +26,9 @@ AOSPEXT_BUILD_SYSTEM := meson
 # recent meson in prebuilts/mesa-build-dep/bin, and nothing here is written in Rust.
 RUST_BIN_DIR := prebuilts/mesa-build-dep/bin
 
-LOCAL_SHARED_LIBRARIES := libc libdl libexif libjpeg libevent libcrypto libyaml libyuv
+LOCAL_SHARED_LIBRARIES := libc libdl libexif libjpeg libevent libcrypto libyuv
+# AOSP only has a static libyaml
+LOCAL_STATIC_LIBRARIES := libyaml
 AOSPEXT_GEN_PKGCONFIGS := libexif libjpeg dl libevent_pthreads libcrypto yaml-0.1 libyuv
 
 MESON_BUILD_ARGUMENTS := \
