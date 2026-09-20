@@ -1,3 +1,13 @@
+# Graphics: simpledrm drives the boot loader's framebuffer first and owns /dev/dri/card0 until msm takes
+# over, so the real display + GPU device is card1 and card0 no longer exists afterwards.
+# - drm_hwcomposer scans card0, card1, ... and stops at the first missing node ("No pipelines
+#   available", headless) unless it is told where to look.
+# - mainline/qcom-common's msm_drm_quirks opens card0 and fails, so the two Adreno 5xx quirks it would
+#   set are given here: without avoid_ubwc the panel shows tiled garbage (MDP5 cannot scan out UBWC).
+vendor.hwc.drm.device=/dev/dri/card1
+vendor.minigbm.avoid_ubwc=true
+vendor.mesa.fd.mesa.debug=sysmem
+
 # Sensors (IIO HAL): with the kernel's in_mount_matrix applied, the accelerometer still comes out with
 # x and y swapped and z negated. Measured on the tablet: upright in portrait (10.1, 0.2, -1.5), camera
 # edge to the left (0.1, 10.2, -1.8), flat with the screen up (0.1, 0.3, -9.8); Android wants
