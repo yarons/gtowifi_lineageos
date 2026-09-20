@@ -53,6 +53,26 @@ PRODUCT_ODM_PROPERTIES += \
 PRODUCT_ODM_PROPERTIES += \
     bluetooth.core.le.vendor_capabilities.enabled=false
 
+# Cameras: GC8034 (rear) and GC2375H (front) on CAMSS deliver raw Bayer frames; libcamera's simple
+# pipeline handler with the software ISP turns them into pictures, its camera HAL module is loaded by
+# the legacy camera provider
+PRODUCT_PACKAGES += \
+    android.hardware.camera.provider@2.5-service_64 \
+    camera.libcamera \
+    libcamera \
+    libcamera-base \
+    ipa_soft_simple.so \
+    ipa_soft_simple.so.sign \
+    uncalibrated.yaml \
+    libcamera-cam
+
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.hardware.camera=libcamera
+
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.camera.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.xml \
+    frameworks/native/data/etc/android.hardware.camera.front.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.front.xml
+
 # Boot animation
 TARGET_SCREEN_HEIGHT := 1280
 TARGET_SCREEN_WIDTH := 800

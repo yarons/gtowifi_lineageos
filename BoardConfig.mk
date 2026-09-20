@@ -126,4 +126,10 @@ TARGET_RECOVERY_PIXEL_FORMAT := BGRX_8888
 
 # VINTF
 DEVICE_MANIFEST_FILE := \
-    $(DEVICE_PATH)/vintf/manifest.xml
+    $(DEVICE_PATH)/vintf/manifest.xml \
+    $(DEVICE_PATH)/vintf/manifest_camera.xml
+
+# Cameras: libcamera through aospext, see libcamera/Android.mk
+BOARD_LIBCAMERA_SRC_DIR := external/libcamera-upstream
+BOARD_LIBCAMERA_IPAS := simple
+BOARD_LIBCAMERA_PIPELINES := simple
