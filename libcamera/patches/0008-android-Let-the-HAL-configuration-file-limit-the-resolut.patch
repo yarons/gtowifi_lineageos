@@ -1,0 +1,118 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Let the HAL configuration file limit the resolution
+
+Optional per-camera properties "maxWidth" and "maxHeight". A camera whose
+frames are processed on the CPU (software ISP) becomes unusable when Android
+picks the full sensor resolution for the JPEG stream: every preview frame is
+then debayered at that size (8 MP: about 180 ms on a Cortex-A53). With the
+limit the camera uses a smaller (binned) sensor mode.
+---
+--- a/src/android/camera_capabilities.cpp
++++ b/src/android/camera_capabilities.cpp
+@@ -401,11 +401,13 @@
+ }
+ 
+ int CameraCapabilities::initialize(std::shared_ptr<Camera> camera,
+-				   int orientation, int facing)
++				   int orientation, int facing,
++				   const Size &maxSize)
+ {
+ 	camera_ = camera;
+ 	orientation_ = orientation;
+ 	facing_ = facing;
++	maxSize_ = maxSize;
+ 	rawStreamAvailable_ = false;
+ 	maxFrameDuration_ = 0;
+ 
+@@ -501,7 +503,25 @@
+ 	 * \todo JPEG - Adjust the maximum available resolution by taking the
+ 	 * JPEG encoder requirements into account (alignment and aspect ratio).
+ 	 */
+-	const Size maxRes = cfg.size;
++	Size maxRes = cfg.size;
++
++	/*
++	 * Apply the limit of the HAL configuration file, and let the camera
++	 * turn it into a size it can produce.
++	 */
++	if (!maxSize_.isNull() &&
++	    (maxRes.width > maxSize_.width || maxRes.height > maxSize_.height)) {
++		cfg.size = maxSize_;
++		if (cameraConfig->validate() == CameraConfiguration::Invalid) {
++			LOG(HAL, Error) << "Failed to limit the resolution to " << maxSize_;
++			return -EINVAL;
++		}
++
++		LOG(HAL, Info) << "Resolution limited from " << maxRes
++			       << " to " << cfg.size;
++		maxRes = cfg.size;
++	}
++
+ 	LOG(HAL, Debug) << "Maximum supported resolution: " << maxRes;
+ 
+ 	/*
+--- a/src/android/camera_capabilities.h
++++ b/src/android/camera_capabilities.h
+@@ -26,7 +26,8 @@
+ 	CameraCapabilities() = default;
+ 
+ 	int initialize(std::shared_ptr<libcamera::Camera> camera,
+-		       int orientation, int facing);
++		       int orientation, int facing,
++		       const libcamera::Size &maxSize);
+ 
+ 	CameraMetadata *staticMetadata() const { return staticMetadata_.get(); }
+ 	libcamera::PixelFormat toPixelFormat(int format) const;
+@@ -70,6 +71,7 @@
+ 
+ 	int facing_;
+ 	int orientation_;
++	libcamera::Size maxSize_;
+ 	bool rawStreamAvailable_;
+ 	int64_t maxFrameDuration_;
+ 	camera_metadata_enum_android_info_supported_hardware_level hwLevel_;
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -377,7 +377,11 @@
+ 		orientation_ = 0;
+ 	}
+ 
+-	return capabilities_.initialize(camera_, orientation_, facing_);
++	Size maxSize;
++	if (cameraConfigData)
++		maxSize = Size(cameraConfigData->maxWidth, cameraConfigData->maxHeight);
++
++	return capabilities_.initialize(camera_, orientation_, facing_, maxSize);
+ }
+ 
+ /*
+--- a/src/android/camera_hal_config.cpp
++++ b/src/android/camera_hal_config.cpp
+@@ -106,6 +106,16 @@
+ 	if (parseRotation(cameraObject, cameraConfigData))
+ 		return -EINVAL;
+ 
++	/*
++	 * Parse the optional properties "maxWidth" and "maxHeight", which cap
++	 * the resolutions reported to Android. Meant for cameras whose frames
++	 * are processed on the CPU, to make them use a smaller sensor mode.
++	 */
++	if (cameraObject.contains("maxWidth") && cameraObject.contains("maxHeight")) {
++		cameraConfigData.maxWidth = cameraObject["maxWidth"].get<uint32_t>(0);
++		cameraConfigData.maxHeight = cameraObject["maxHeight"].get<uint32_t>(0);
++	}
++
+ 	return 0;
+ }
+ 
+--- a/src/android/camera_hal_config.h
++++ b/src/android/camera_hal_config.h
+@@ -15,6 +15,8 @@
+ struct CameraConfigData {
+ 	int facing = -1;
+ 	int rotation = -1;
++	unsigned int maxWidth = 0;
++	unsigned int maxHeight = 0;
+ };
+ 
+ class CameraHalConfig final : public libcamera::Extensible

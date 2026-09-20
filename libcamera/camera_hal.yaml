@@ -6,6 +6,9 @@ cameras:
   "/base/soc@0/cci@1b0c000/i2c-bus@0/camera-sensor@37":
     location: back
     rotation: 270
+    # Software ISP: use the binned 1632x1224 sensor mode, 8 MP is about 5 fps.
+    maxWidth: 1632
+    maxHeight: 1224
   "/base/soc@0/cci@1b0c000/i2c-bus@1/camera-sensor@17":
     location: front
     rotation: 90
