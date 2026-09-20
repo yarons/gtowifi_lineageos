@@ -14,8 +14,9 @@ TARGET_QCOM_SOC := sdm429
 # /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
 TARGET_HEALTH_HAL := default-aidl
 TARGET_SUPPORTS_SUSPEND := false
-# Display: 12nm DSI PHY is not in the kernel, lk2nd's framebuffer is all there is
-TARGET_USES_FRAMEBUFFER_DISPLAY := true
+# Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
+# gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
+# No backlight node yet: brightness stays where the boot loader left it.
 # Sensors: accelerometer and proximity sit behind the ADSP; the kernel exposes them as IIO devices through
 # IIO_QCOM_SMGR_* once the ADSP runs and has its registry (persist/sensors/sns.reg)
 TARGET_SENSORS_HAL := iio

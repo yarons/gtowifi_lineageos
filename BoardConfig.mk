@@ -41,8 +41,7 @@ BOARD_KERNEL_CMDLINE := \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
     console=tty0 \
-    lk2nd.pass-ramoops=zap \
-    lk2nd.pass-simplefb=xrgb8888,relocate
+    lk2nd.pass-ramoops=zap
 
 # TODO: write sepolicy for the mainline services, then drop this
 BOARD_KERNEL_CMDLINE += \
@@ -79,6 +78,7 @@ TARGET_KERNEL_CONFIG_EXT := \
 # Kernel modules
 BOARD_RECOVERY_RAMDISK_KERNEL_MODULES_LOAD := \
     $(strip $(shell cat $(DEVICE_PATH)/modprobe/modules.load.basic)) \
+    $(strip $(shell cat $(DEVICE_PATH)/modprobe/modules.load.drm)) \
     $(strip $(shell cat $(DEVICE_PATH)/modprobe/modules.load.touchscreen))
 BOARD_VENDOR_KERNEL_MODULES_LOAD := \
     $(BOARD_RECOVERY_RAMDISK_KERNEL_MODULES_LOAD)
