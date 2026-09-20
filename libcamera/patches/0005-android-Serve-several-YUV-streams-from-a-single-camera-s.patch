@@ -1,0 +1,276 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Serve several YUV streams from a single camera stream
+
+The software ISP of the simple pipeline handler produces one processed
+stream, Android applications ask for a preview stream plus a JPEG stream
+("Unsupported number of output streams: 2"). Capture the largest NV12 stream
+only and scale the smaller ones down from it with the YUV post-processor,
+which already supports that:
+
+- configureStreams() maps the smaller NV12 streams onto the largest one, and
+  an Internal stream (the NV12 source of a JPEG stream) may be the source of
+  Mapped streams.
+- CameraStream::process() describes the destination buffer of a YUV stream
+  with the size of the Android stream instead of the size of its source.
+- The generic frame buffer allocator uses anonymous memory instead of the
+  legacy gralloc module, which does not exist (or has no YUV formats) on
+  devices with a current gralloc. The buffers are only accessed by the CPU.
+---
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -705,6 +705,43 @@
+ 	}
+ 
+ 	sortCamera3StreamConfigs(streamConfigs, jpegStream);
++
++	/*
++	 * A camera that produces a single processed stream (the simple pipeline
++	 * handler with the software ISP) can't serve several NV12 streams.
++	 * Capture only the largest NV12 stream, which
++	 * sortCamera3StreamConfigs() has put first, and let the YUV
++	 * post-processor scale the smaller ones down from it.
++	 */
++	if (streamConfigs.size() > 1 &&
++	    streamConfigs[0].config.pixelFormat == formats::NV12) {
++		Camera3StreamConfig &largest = streamConfigs[0];
++
++		for (auto it = streamConfigs.begin() + 1; it != streamConfigs.end();) {
++			bool yuvOnly = it->config.pixelFormat == formats::NV12 &&
++				       std::all_of(it->streams.begin(), it->streams.end(),
++						   [](const Camera3StreamConfig::Camera3Stream &s) {
++							   return s.stream->format != HAL_PIXEL_FORMAT_BLOB;
++						   });
++			if (!yuvOnly ||
++			    it->config.size.width > largest.config.size.width ||
++			    it->config.size.height > largest.config.size.height) {
++				++it;
++				continue;
++			}
++
++			LOG(HAL, Info)
++				<< it->config.size << " will be scaled down from "
++				<< largest.config.size;
++
++			for (auto &s : it->streams) {
++				s.stream->usage |= GRALLOC_USAGE_SW_WRITE_OFTEN;
++				largest.streams.push_back({ s.stream, CameraStream::Type::Mapped });
++			}
++
++			it = streamConfigs.erase(it);
++		}
++	}
+ 	for (const auto &streamConfig : streamConfigs) {
+ 		config->addConfiguration(streamConfig.config);
+ 
+@@ -723,7 +760,8 @@
+ 			 * be used when constructing the subsequent mapped
+ 			 * streams.
+ 			 */
+-			if (stream.type == CameraStream::Type::Direct)
++			if (stream.type == CameraStream::Type::Direct ||
++			    stream.type == CameraStream::Type::Internal)
+ 				sourceStream = &streams_.back();
+ 		}
+ 	}
+--- a/src/android/camera_stream.cpp
++++ b/src/android/camera_stream.cpp
+@@ -182,9 +182,18 @@
+ 		streamBuffer->fence.reset();
+ 	}
+ 
++	/*
++	 * A YUV stream may be scaled down from its source stream: describe the
++	 * destination buffer with the size of the Android stream. JPEG goes to
++	 * a blob buffer, which keeps being described by the source.
++	 */
+ 	const StreamConfiguration &output = configuration();
++	Size dstSize = output.size;
++	if (camera3Stream_->format != HAL_PIXEL_FORMAT_BLOB)
++		dstSize = Size(camera3Stream_->width, camera3Stream_->height);
++
+ 	streamBuffer->dstBuffer = std::make_unique<CameraBuffer>(
+-		*streamBuffer->camera3Buffer, output.pixelFormat, output.size,
++		*streamBuffer->camera3Buffer, output.pixelFormat, dstSize,
+ 		PROT_READ | PROT_WRITE);
+ 	if (!streamBuffer->dstBuffer->isValid()) {
+ 		LOG(HAL, Error) << "Failed to create destination buffer";
+--- a/src/android/mm/generic_frame_buffer_allocator.cpp
++++ b/src/android/mm/generic_frame_buffer_allocator.cpp
+@@ -2,22 +2,21 @@
+ /*
+  * Copyright (C) 2021, Google Inc.
+  *
+- * Allocate FrameBuffer using gralloc API
++ * Allocate FrameBuffer from anonymous memory
+  */
+ 
+-#include <dlfcn.h>
+ #include <memory>
+ #include <vector>
+ 
+ #include <libcamera/base/log.h>
++#include <libcamera/base/memfd.h>
+ #include <libcamera/base/shared_fd.h>
++#include <libcamera/base/unique_fd.h>
+ 
+ #include "libcamera/internal/formats.h"
+ #include "libcamera/internal/framebuffer.h"
+ 
+ #include <hardware/camera3.h>
+-#include <hardware/gralloc.h>
+-#include <hardware/hardware.h>
+ 
+ #include "../camera_device.h"
+ #include "../frame_buffer_allocator.h"
+@@ -27,42 +26,23 @@
+ 
+ LOG_DECLARE_CATEGORY(HAL)
+ 
++/*
++ * The buffers allocated here are only written by the camera and read by the
++ * JPEG and YUV post-processors, all on the CPU. The legacy gralloc module they
++ * used to come from does not exist on devices with a gralloc 4 or later
++ * (hw_get_module() fails, or finds a gralloc.default that has no YUV formats),
++ * so use anonymous memory, with the planes stored contiguously.
++ */
+ namespace {
+ class GenericFrameBufferData : public FrameBuffer::Private
+ {
+ 	LIBCAMERA_DECLARE_PUBLIC(FrameBuffer)
+ 
+ public:
+-	GenericFrameBufferData(struct alloc_device_t *allocDevice,
+-			       buffer_handle_t handle,
+-			       Span<const FrameBuffer::Plane> planes)
+-		: FrameBuffer::Private(planes), allocDevice_(allocDevice),
+-		  handle_(handle)
+-	{
+-		ASSERT(allocDevice_);
+-		ASSERT(handle_);
+-	}
+-
+-	~GenericFrameBufferData() override
++	GenericFrameBufferData(Span<const FrameBuffer::Plane> planes)
++		: FrameBuffer::Private(planes)
+ 	{
+-		/*
+-		 * allocDevice_ is used to destroy handle_. allocDevice_ is
+-		 * owned by PlatformFrameBufferAllocator::Private.
+-		 * GenericFrameBufferData must be destroyed before it is
+-		 * destroyed.
+-		 *
+-		 * \todo Consider managing alloc_device_t with std::shared_ptr
+-		 * if this is difficult to maintain.
+-		 *
+-		 * \todo Thread safety against alloc_device_t is not documented.
+-		 * Is it no problem to call alloc/free in parallel?
+-		 */
+-		allocDevice_->free(allocDevice_, handle_);
+ 	}
+-
+-private:
+-	struct alloc_device_t *allocDevice_;
+-	const buffer_handle_t handle_;
+ };
+ } /* namespace */
+ 
+@@ -72,68 +52,46 @@
+ 
+ public:
+ 	Private(CameraDevice *const cameraDevice)
+-		: cameraDevice_(cameraDevice),
+-		  hardwareModule_(nullptr),
+-		  allocDevice_(nullptr)
++		: cameraDevice_(cameraDevice)
+ 	{
+-		hw_get_module(GRALLOC_HARDWARE_MODULE_ID, &hardwareModule_);
+-		ASSERT(hardwareModule_);
+ 	}
+ 
+-	~Private() override;
+-
+ 	std::unique_ptr<HALFrameBuffer>
+ 	allocate(int halPixelFormat, const libcamera::Size &size, uint32_t usage);
+ 
+ private:
+ 	const CameraDevice *const cameraDevice_;
+-	const struct hw_module_t *hardwareModule_;
+-	struct alloc_device_t *allocDevice_;
+ };
+ 
+-PlatformFrameBufferAllocator::Private::~Private()
+-{
+-	if (allocDevice_)
+-		gralloc_close(allocDevice_);
+-	dlclose(hardwareModule_->dso);
+-}
+-
+ std::unique_ptr<HALFrameBuffer>
+ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
+ 						const libcamera::Size &size,
+-						uint32_t usage)
++						[[maybe_unused]] uint32_t usage)
+ {
+-	if (!allocDevice_) {
+-		int ret = gralloc_open(hardwareModule_, &allocDevice_);
+-		if (ret) {
+-			LOG(HAL, Fatal) << "gralloc_open() failed: " << ret;
+-			return nullptr;
+-		}
+-	}
+-
+-	int stride = 0;
+-	buffer_handle_t handle = nullptr;
+-	int ret = allocDevice_->alloc(allocDevice_, size.width, size.height,
+-				      halPixelFormat, usage, &handle, &stride);
+-	if (ret) {
+-		LOG(HAL, Error) << "failed buffer allocation: " << ret;
+-		return nullptr;
+-	}
+-	if (!handle) {
+-		LOG(HAL, Fatal) << "invalid buffer_handle_t";
+-		return nullptr;
+-	}
+-
+-	/* This code assumes the planes are mapped consecutively. */
+ 	const libcamera::PixelFormat pixelFormat =
+ 		cameraDevice_->capabilities()->toPixelFormat(halPixelFormat);
+ 	const auto &info = PixelFormatInfo::info(pixelFormat);
++	if (!info.isValid()) {
++		LOG(HAL, Error) << "Invalid pixel format: " << pixelFormat;
++		return nullptr;
++	}
++
+ 	std::vector<FrameBuffer::Plane> planes(info.numPlanes());
+ 
+-	SharedFD fd{ handle->data[0] };
++	size_t length = 0;
++	for (unsigned int i = 0; i < planes.size(); i++)
++		length += info.planeSize(size, i);
++
++	UniqueFD memfd = MemFd::create("libcamera-hal", length);
++	if (!memfd.isValid()) {
++		LOG(HAL, Error) << "failed buffer allocation";
++		return nullptr;
++	}
++
++	SharedFD fd{ std::move(memfd) };
+ 	size_t offset = 0;
+ 	for (auto [i, plane] : utils::enumerate(planes)) {
+-		const size_t planeSize = info.planeSize(size.height, i, stride);
++		const size_t planeSize = info.planeSize(size, i);
+ 
+ 		plane.fd = fd;
+ 		plane.offset = offset;
+@@ -142,9 +100,7 @@
+ 	}
+ 
+ 	return std::make_unique<HALFrameBuffer>(
+-		std::make_unique<GenericFrameBufferData>(
+-			allocDevice_, handle, planes),
+-		handle);
++		std::make_unique<GenericFrameBufferData>(planes), nullptr);
+ }
+ 
+ PUBLIC_FRAME_BUFFER_ALLOCATOR_IMPLEMENTATION
+
