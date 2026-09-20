@@ -1,2 +1,9 @@
+# Sensors (IIO HAL): with the kernel's in_mount_matrix applied, the accelerometer still comes out with
+# x and y swapped and z negated. Measured on the tablet: upright in portrait (10.1, 0.2, -1.5), camera
+# edge to the left (0.1, 10.2, -1.8), flat with the screen up (0.1, 0.3, -9.8); Android wants
+# (0, 9.8, 0), (9.8, 0, 0) and (0, 0, 9.8).
+ro.vendor.iio.accel.order=102
+ro.vendor.iio.accel.z.opt_scale=-1
+
 # ZRAM
 persist.sys.zram_enabled=1
