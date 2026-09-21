@@ -208,32 +208,31 @@ ndk::ScopedAStatus Gnss::stopNmea() {
     return ndk::ScopedAStatus::ok();
 }
 
-/* The framework copes with every missing extension: null where that is allowed, an error elsewhere */
-ndk::ScopedAStatus Gnss::getExtensionPsds(std::shared_ptr<IGnssPsds>* result) {
-    *result = nullptr;
-    return ndk::ScopedAStatus::ok();
+/*
+ * No extension is implemented. Every getter fails, also those that may return null: the framework
+ * checks the status only and wraps a null interface as if it were there, and system_server then
+ * dies in GnssPsdsAidl::setCallback() (seen on 2026-09-21).
+ */
+ndk::ScopedAStatus Gnss::getExtensionPsds(std::shared_ptr<IGnssPsds>*) {
+    return unsupported();
 }
 
-ndk::ScopedAStatus Gnss::getExtensionGnssBatching(std::shared_ptr<IGnssBatching>* result) {
-    *result = nullptr;
-    return ndk::ScopedAStatus::ok();
+ndk::ScopedAStatus Gnss::getExtensionGnssBatching(std::shared_ptr<IGnssBatching>*) {
+    return unsupported();
 }
 
-ndk::ScopedAStatus Gnss::getExtensionGnssGeofence(std::shared_ptr<IGnssGeofence>* result) {
-    *result = nullptr;
-    return ndk::ScopedAStatus::ok();
+ndk::ScopedAStatus Gnss::getExtensionGnssGeofence(std::shared_ptr<IGnssGeofence>*) {
+    return unsupported();
 }
 
 ndk::ScopedAStatus Gnss::getExtensionGnssNavigationMessage(
-        std::shared_ptr<IGnssNavigationMessageInterface>* result) {
-    *result = nullptr;
-    return ndk::ScopedAStatus::ok();
+        std::shared_ptr<IGnssNavigationMessageInterface>*) {
+    return unsupported();
 }
 
 ndk::ScopedAStatus Gnss::getExtensionMeasurementCorrections(
-        std::shared_ptr<measurement_corrections::IMeasurementCorrectionsInterface>* result) {
-    *result = nullptr;
-    return ndk::ScopedAStatus::ok();
+        std::shared_ptr<measurement_corrections::IMeasurementCorrectionsInterface>*) {
+    return unsupported();
 }
 
 ndk::ScopedAStatus Gnss::getExtensionGnssConfiguration(std::shared_ptr<IGnssConfiguration>*) {
