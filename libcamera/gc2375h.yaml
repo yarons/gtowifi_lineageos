@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Tuning of libcamera's software ISP IPA ("simple") for the front camera, GalaxyCore GC2375H (fixed
+# focus). Same as libcamera's uncalibrated.yaml plus more colour saturation.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+  - Awb:
+  - Adjust:
+      # No colour correction matrix (too slow on the CPU): the raw colours are pale.
+      saturation: 1.6
+  - Agc:
+  - Af:
+...

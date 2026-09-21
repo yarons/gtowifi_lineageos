@@ -11,6 +11,8 @@ algorithms:
   - BlackLevel:
   - Awb:
   - Adjust:
+      # No colour correction matrix (too slow on the CPU): the raw colours are pale.
+      saturation: 1.6
   - Agc:
   - Af:
       startPosition: 320

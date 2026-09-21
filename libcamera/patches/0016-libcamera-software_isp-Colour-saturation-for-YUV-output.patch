@@ -1,0 +1,126 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: software_isp: Colour saturation for YUV output without CCM
+
+Without colour correction matrix, which costs too much on the CPU to be
+enabled by default, the colours of a raw sensor are pale, and the Saturation
+control does not exist because it is implemented in the matrix.
+
+Add a saturation to the debayer parameters that the CPU debayer applies to
+the colour differences while it converts to NV12, where it is one multiply
+per chroma sample. The Adjust algorithm offers the Saturation control in that
+case too, with a default from the tuning file ("saturation", 1.0 if absent).
+---
+--- a/include/libcamera/internal/software_isp/debayer_params.h
++++ b/include/libcamera/internal/software_isp/debayer_params.h
+@@ -25,6 +25,12 @@
+ 	float gamma = 1.0;
+ 	float contrastExp = 1.0;
+ 	RGB<float> gains = RGB<float>({ 1.0, 1.0, 1.0 });
++	/*
++	 * Colour saturation for outputs that are converted to YUV, where it
++	 * costs next to nothing. 1.0 leaves the colours alone. Not used when a
++	 * colour correction matrix is, which includes the saturation.
++	 */
++	float saturation = 1.0;
+ };
+ 
+ } /* namespace libcamera */
+--- a/src/ipa/simple/algorithms/adjust.cpp
++++ b/src/ipa/simple/algorithms/adjust.cpp
+@@ -24,15 +24,23 @@
+ 
+ LOG_DEFINE_CATEGORY(IPASoftAdjust)
+ 
+-int Adjust::init(IPAContext &context, [[maybe_unused]] const ValueNode &tuningData)
++int Adjust::init(IPAContext &context, const ValueNode &tuningData)
+ {
++	/*
++	 * Without colour correction matrix the colours of most sensors are
++	 * pale. The tuning file can ask for more saturation, which is then
++	 * applied where the picture is converted to YUV.
++	 */
++	defaultSaturation_ = std::clamp(tuningData["saturation"].get<float>(kDefaultSaturation),
++					0.0f, 2.0f);
++
+ 	context.ctrlMap[&controls::Gamma] =
+ 		ControlInfo(0.1f, 10.0f, kDefaultGamma);
+ 	context.ctrlMap[&controls::Contrast] =
+ 		ControlInfo(0.0f, 2.0f, kDefaultContrast);
+-	if (context.ccmEnabled)
+-		context.ctrlMap[&controls::Saturation] =
+-			ControlInfo(0.0f, 2.0f, kDefaultSaturation);
++	context.ctrlMap[&controls::Saturation] =
++		ControlInfo(0.0f, 2.0f, context.ccmEnabled ? kDefaultSaturation
++							   : defaultSaturation_);
+ 	return 0;
+ }
+ 
+@@ -106,6 +114,11 @@
+ 		frameContext.saturation = saturation;
+ 	}
+ 
++	if (!context.ccmEnabled) {
++		frameContext.saturation = saturation.value_or(defaultSaturation_);
++		params->saturation = frameContext.saturation.value();
++	}
++
+ 	params->gamma = 1.0 / context.activeState.knobs.gamma;
+ 	const float contrast = context.activeState.knobs.contrast.value_or(kDefaultContrast);
+ 	params->contrastExp = tan(std::clamp(contrast * M_PI_4, 0.0, M_PI_2 - 0.00001));
+--- a/src/ipa/simple/algorithms/adjust.h
++++ b/src/ipa/simple/algorithms/adjust.h
+@@ -43,6 +43,8 @@
+ 
+ private:
+ 	void applySaturation(Matrix<float, 3, 3> &ccm, float saturation);
++
++	float defaultSaturation_ = 1.0f;
+ };
+ 
+ } /* namespace ipa::soft::algorithms */
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -1094,8 +1094,11 @@
+  * range BT.601 (JFIF), which is what the Android camera HAL announces for its
+  * YUV and JPEG streams. Chroma is the average of each 2x2 block.
+  */
+-void DebayerCpu::convertToNv12(MappedFrameBuffer &out)
++void DebayerCpu::convertToNv12(MappedFrameBuffer &out, float saturation)
+ {
++	/* The saturation scales the colour differences, in 1/256 steps. */
++	const int chromaGain = std::clamp(static_cast<int>(saturation * 256), 0, 1024);
++
+ 	const unsigned int width = outputSize_.width;
+ 	const unsigned int height = outputSize_.height;
+ 	const unsigned int stride = outputConfig_.stride;
+@@ -1121,8 +1124,8 @@
+ 			const int r = (src0[0] + src0[4] + src1[0] + src1[4] + 2) >> 2;
+ 			const int g = (src0[1] + src0[5] + src1[1] + src1[5] + 2) >> 2;
+ 			const int b = (src0[2] + src0[6] + src1[2] + src1[6] + 2) >> 2;
+-			const int cb = ((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128;
+-			const int cr = ((128 * r - 107 * g - 21 * b + 128) >> 8) + 128;
++			const int cb = (((-43 * r - 85 * g + 128 * b + 128) >> 8) * chromaGain >> 8) + 128;
++			const int cr = (((128 * r - 107 * g - 21 * b + 128) >> 8) * chromaGain >> 8) + 128;
+ 
+ 			chroma[x] = std::clamp(cb, 0, 255);
+ 			chroma[x + 1] = std::clamp(cr, 0, 255);
+@@ -1174,7 +1177,7 @@
+ 	}
+ 
+ 	if (nv12Output_) {
+-		convertToNv12(out);
++		convertToNv12(out, params.saturation);
+ 		const unsigned int lumaSize = outputConfig_.stride * outputSize_.height;
+ 		if (metadata.planes().size() > 1) {
+ 			metadata.planes()[0].bytesused = lumaSize;
+--- a/src/libcamera/software_isp/debayer_cpu.h
++++ b/src/libcamera/software_isp/debayer_cpu.h
+@@ -163,7 +163,7 @@
+ 	 * frame and converted afterwards. dstStride_ is the line stride the
+ 	 * debayer threads write with.
+ 	 */
+-	void convertToNv12(MappedFrameBuffer &out);
++	void convertToNv12(MappedFrameBuffer &out, float saturation);
+ 	bool nv12Output_ = false;
+ 	unsigned int dstStride_ = 0;
+ 	Size outputSize_;
