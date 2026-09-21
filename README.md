@@ -28,7 +28,7 @@ eBPF features its 4.9 kernel does not have.
 
 | Path | URL | Branch |
 |---|---|---|
-| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/display-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads, 12nm DSI PHY, ILI9881C panel, GPU). Not pushed there yet: the cameras (sensor drivers, lens, CAMSS board nodes), the 2.4 GHz Wi-Fi fix and the two DRM fixes named in the hardware table | 7.1.3 |
+| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/android-7.1.3-r12`, which is `gtowifi/display-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads, 12nm DSI PHY, ILI9881C panel, GPU). plus the cameras (sensor drivers, lens, CAMSS board nodes), the backlight, the 2.4 GHz Wi-Fi fix, the two DRM fixes named in the hardware table and the Android patches below | 7.1.3 |
 
 Patches needed on top, from `kernel/common-patches` (`main-kernel/android-mainline`), exactly as for the
 other msm89x7 targets of the stack:
@@ -56,14 +56,14 @@ Seen on the tablet on 2026-09-20 and 2026-09-21 unless marked otherwise.
 | SD card | works | untested |
 | Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. 5 GHz and 2.4 GHz work. 2.4 GHz needs the kernel change that stops advertising 40 MHz channels on that band: the firmware rejects the join otherwise (`hal_join`/`hal_config_bss` -5), and the next 5 GHz link drops within seconds. `qcom,wcn3680` as iris variant is wrong for this unit | connects (WPA2); WPA2/WPA3 transition networks need the overlay in `rro_overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
 | Bluetooth | works under postmarketOS | untested |
-| Display | drm/msm MDP5 with a driver for the SDM429 12nm DSI PHY and the ILI9881C panel. The backlight is a `pwm-backlight` on the PM8953 PWM (`/sys/class/backlight/backlight`), tested from an initramfs. Android needs two fixes: drm/msm leaked the GEM objects of clients without their own GPU address space (`msm_gem_close`), and `fence_to_crtc()` races with the signalling of a CRTC out-fence, a kernel BUG after a few hours because Android reads `SYNC_IOC_FILE_INFO` of every out-fence | drm_hwcomposer + minigbm; brightness control through the stack's lights HAL is untested. `mdp5_crtc_atomic_check: too many planes` in the kernel log is harmless (3 blend stages, the composer falls back to the GPU) |
+| Display | drm/msm MDP5 with a driver for the SDM429 12nm DSI PHY and the ILI9881C panel. The backlight is a `pwm-backlight` on the PM8953 PWM (`/sys/class/backlight/backlight`). Android needs two fixes: drm/msm leaked the GEM objects of clients without their own GPU address space (`msm_gem_close`), and `fence_to_crtc()` races with the signalling of a CRTC out-fence, a kernel BUG after a few hours because Android reads `SYNC_IOC_FILE_INFO` of every out-fence | drm_hwcomposer + minigbm; the brightness setting reaches the backlight through the stack's lights HAL. `mdp5_crtc_atomic_check: too many planes` in the kernel log is harmless (3 blend stages, the composer falls back to the GPU) |
 | GPU (Adreno 504, driven as A505) | drm/msm | Mesa freedreno, OpenGL ES 3.1 (`FD505`) |
 | Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback and the built-in microphone work | tinyhal, `audio/audio.gtowifi_mainline.xml`: speakers and the built-in microphone work (videos have sound). Software noise suppression and gain control for the microphone are configured (`audio/audio_effects.xml`) but not verified; headphone jack and headset untested |
 | Battery, charging (PMI632) | SMB5 charger + fuel gauge (level, voltage, OCV, current, charge) | real level, voltage, temperature and charger state through the default health AIDL HAL |
 | Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`); no gyroscope | IIO sensors HAL: both work, auto-rotate works. Needs the ueventd rules, the HAL restart after the ADSP is up and the axis properties of this tree |
-| Suspend | off | off |
-| Cameras (GC8034 rear with focus motor, GC2375H front, on CAMSS) | sensor and lens drivers from the board work; raw Bayer frames through V4L2 | libcamera 0.7.2: simple pipeline handler with the software ISP (CPU), its Android HAL under the legacy camera provider, and the patches in `libcamera/patches/` (the HAL did not work with this kind of camera as it is). Preview at 21 to 24 fps (rear in the binned 1624x1224 mode; the 8 MP mode gives about 5 fps and is switched off in `libcamera/camera_hal.yaml`), photos (rear 2 MP), video 640x480 with sound, continuous autofocus and tap to focus, exposure compensation. No colour correction matrix and no noise reduction: pure colours are pale and low light is noisy. 720p video untested |
-| GNSS | bring-up in progress | nothing |
+| Suspend | s2idle only, no cpuidle states yet. A manual suspend and RTC wake-up work; after Android's own suspend cycles the ADSP audio path stops answering | off (`TARGET_SUPPORTS_SUSPEND := false`) until the kernel side is fixed |
+| Cameras (GC8034 rear with focus motor, GC2375H front, on CAMSS) | sensor and lens drivers from the board work; raw Bayer frames through V4L2 | libcamera 0.7.2: simple pipeline handler with the software ISP (CPU), its Android HAL under the legacy camera provider, and the patches in `libcamera/patches/` (the HAL did not work with this kind of camera as it is). Preview at 21 to 24 fps (rear in the binned 1624x1224 mode; the 8 MP mode gives about 5 fps and is switched off in `libcamera/camera_hal.yaml`), photos (rear 2 MP), video 640x480 with sound, continuous autofocus and tap to focus, exposure compensation, camera ids pinned (rear 0, front 1). No colour correction matrix, no lens shading correction and no noise reduction: pure colours are pale and low light is noisy. The 720p camcorder profile (`media/`) is untested |
+| GNSS | the location engine runs on the modem DSP, which this Wi-Fi model has too. With one more board commit (not in the kernel branch above yet) the modem boots and its QMI location service (LOC v2 over QRTR) gives a fix | `gnss/`: an AIDL GNSS HAL that speaks QMI LOC over QRTR without any proprietary library, plus the modem bring-up (firmware from the tablet's `modem` partition, `rmtfs` read-only so that the EFS partitions are never written). Builds and registers; has not had a modem to talk to yet |
 | SELinux | | permissive |
 | RAM | | tight (1.9 GB). zram needs the init script of this tree: `swapon_all` fails on current kernels |
 
@@ -104,10 +104,31 @@ keymaster, which a mainline kernel cannot reach. The same applies on the way bac
 ## Build
 
     repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs
-    cp device/samsung/gtowifi_mainline/local_manifests/gtowifi_mainline.xml .repo/local_manifests/
+    git clone -b lineage-23.2 https://github.com/yarons/gtowifi_lineageos /tmp/gtowifi_lineageos
+    mkdir -p .repo/local_manifests
+    cp /tmp/gtowifi_lineageos/local_manifests/*.xml .repo/local_manifests/
     repo sync
-    # platform patches: device/mainline/generic/docs/patches.md
-    source build/envsetup.sh && breakfast gtowifi_mainline userdebug && mka bacon
+    device/samsung/gtowifi_mainline/tools/apply-patches.sh
+    source build/envsetup.sh && breakfast gtowifi_mainline userdebug
+    mka bootimage vendorimage vendor_dlkmimage systemimage
+
+The two manifests list everything that is not part of a plain LineageOS checkout: this tree, the
+kernel, LineageOS's mainline-kernel stack, and for the cameras upstream libcamera v0.7.2 plus
+GloDroid's `aospext` (meson inside the Android build, the same way the stack builds Mesa), both
+pinned. `libcamera/patches/` is applied to a copy of libcamera at build time
+(`BOARD_LIBCAMERA_PATCHES_DIRS`); `tools/apply-patches.sh` applies `patches/` to the platform.
+Nothing has to be picked from Gerrit: the four `system/core` changes that
+`device/mainline/generic/docs/patches.md` names were abandoned, the stack no longer needs them.
+
+Install, from lk2nd's fastboot (the partition table stays Samsung's):
+
+    fastboot flash system system.img
+    fastboot flash vendor vendor.img
+    fastboot flash product vendor_dlkm.img
+    device/samsung/gtowifi_mainline/tools/make-fastboot-boot-img.sh $OUT boot-fastboot-v0.img
+    fastboot boot boot-fastboot-v0.img
+
+`vendor_dlkm.img` holds the kernel modules and has to come from the same build as the boot image.
 
 ## Credits
 
