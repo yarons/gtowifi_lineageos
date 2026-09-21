@@ -1,0 +1,164 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: agc: Add a digital gain for scenes the sensor can't expose
+
+With the longest exposure and the highest analogue gain the picture of an
+indoor scene in the evening is still dark, and the exposure compensation
+has nothing left to work with. Add a digital gain of up to 6, applied by the
+software ISP together with the colour gains.
+
+The statistics are taken from the raw picture, so the gain does not show in
+them: the wanted gain is found by applying candidates to the histogram until
+the mean sample value reaches the target of the regulation (which includes
+the exposure value). It is only used while the sensor is at its limits and
+follows the wanted value gradually. Reported as DigitalGain.
+---
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -70,6 +70,14 @@
+ static constexpr float kExposureValueMax = 2.0;
+ static constexpr float kExposureValueStep = 0.6;
+ 
++/*
++ * Digital gain, applied by the software ISP with the colour gains, for scenes
++ * that are still too dark with the longest exposure and the highest analogue
++ * gain of the sensor. It amplifies the noise as well, hence the limit.
++ */
++static constexpr float kDigitalGainMax = 6.0;
++static constexpr float kDigitalGainSpeed = 0.25;
++
+ Agc::Agc()
+ {
+ }
+@@ -83,6 +91,15 @@
+ 	return 0;
+ }
+ 
++int Agc::configure(IPAContext &context,
++		   [[maybe_unused]] const IPAConfigInfo &configInfo)
++{
++	digitalGain_ = 1.0f;
++	context.activeState.agc.digitalGain = digitalGain_;
++
++	return 0;
++}
++
+ void Agc::queueRequest([[maybe_unused]] IPAContext &context,
+ 		       [[maybe_unused]] const uint32_t frame,
+ 		       [[maybe_unused]] IPAFrameContext &frameContext,
+@@ -165,6 +182,7 @@
+ 	metadata.set(controls::ExposureTime, exposureTime.get<std::micro>());
+ 	metadata.set(controls::AnalogueGain, frameContext.sensor.gain);
+ 	metadata.set(controls::ExposureValue, exposureValue_);
++	metadata.set(controls::DigitalGain, digitalGain_);
+ 
+ 	if (!context.activeState.agc.valid) {
+ 		/*
+@@ -221,6 +239,55 @@
+ 
+ 	float exposureMSV = (denom == 0 ? 0 : static_cast<float>(num) / denom);
+ 	updateExposure(context, frameContext, exposureMSV);
++
++	/*
++	 * The statistics are those of the raw picture, the digital gain does
++	 * not show in them: find the gain that would bring the mean sample
++	 * value to the target, by applying it to the histogram. Only when the
++	 * sensor can do no more.
++	 */
++	auto msvWithGain = [&](float gain) {
++		unsigned int bins[kExposureBinsCount] = {};
++		for (unsigned int i = 0; i < histogramSize; i++) {
++			unsigned int j = std::min<unsigned int>(histogramSize - 1, i * gain);
++			unsigned int idx = (j - (j / yHistValsPerBinMod)) / yHistValsPerBin;
++			bins[idx] += histogram[blackLevelHistIdx + i];
++		}
++
++		unsigned int n = 0;
++		unsigned int d = 0;
++		for (unsigned int i = 0; i < kExposureBinsCount; i++) {
++			d += bins[i];
++			n += bins[i] * (i + 1);
++		}
++
++		return d == 0 ? 0.0f : static_cast<float>(n) / d;
++	};
++
++	const float target = kExposureOptimal + exposureValue_ * kExposureValueStep;
++	const bool sensorAtMax =
++		frameContext.sensor.exposure >= context.configuration.agc.exposureMax &&
++		frameContext.sensor.gain >= context.configuration.agc.againMax -
++						    context.configuration.agc.againMinStep;
++	float desired = 1.0f;
++	if (sensorAtMax && exposureMSV < target - kExposureSatisfactory) {
++		float low = 1.0f;
++		float high = kDigitalGainMax;
++		for (unsigned int i = 0; i < 8; i++) {
++			const float middle = (low + high) / 2;
++			if (msvWithGain(middle) < target)
++				low = middle;
++			else
++				high = middle;
++		}
++		desired = low;
++	}
++
++	digitalGain_ += (desired - digitalGain_) * kDigitalGainSpeed;
++	context.activeState.agc.digitalGain = digitalGain_;
++
++	LOG(IPASoftExposure, Debug)
++		<< "digital gain " << digitalGain_ << " (wanted " << desired << ")";
+ }
+ 
+ REGISTER_IPA_ALGORITHM(Agc, "Agc")
+--- a/src/ipa/simple/algorithms/agc.h
++++ b/src/ipa/simple/algorithms/agc.h
+@@ -20,6 +20,7 @@
+ 	~Agc() = default;
+ 
+ 	int init(IPAContext &context, const ValueNode &tuningData) override;
++	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
+ 	void queueRequest(IPAContext &context, const uint32_t frame,
+ 			  IPAFrameContext &frameContext,
+ 			  const ControlList &controls) override;
+@@ -32,6 +33,7 @@
+ 	void updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV);
+ 
+ 	float exposureValue_ = 0.0f;
++	float digitalGain_ = 1.0f;
+ };
+ 
+ } /* namespace ipa::soft::algorithms */
+--- a/src/ipa/simple/algorithms/awb.cpp
++++ b/src/ipa/simple/algorithms/awb.cpp
+@@ -7,6 +7,7 @@
+ 
+ #include "awb.h"
+ 
++#include <algorithm>
+ #include <numeric>
+ #include <stdint.h>
+ 
+@@ -39,8 +40,13 @@
+ {
+ 	auto &gains = context.activeState.awb.gains;
+ 
++	/* The digital gain of the exposure regulation goes with the colour gains. */
++	const float digitalGain = std::max(1.0, context.activeState.agc.digitalGain);
++
+ 	frameContext.gains = gains;
+-	params->gains = gains;
++	params->gains = RGB<float>({ gains.r() * digitalGain,
++				     gains.g() * digitalGain,
++				     gains.b() * digitalGain });
+ }
+ 
+ void Awb::process(IPAContext &context,
+--- a/src/ipa/simple/ipa_context.h
++++ b/src/ipa/simple/ipa_context.h
+@@ -43,6 +43,7 @@
+ 	struct {
+ 		int32_t exposure;
+ 		double again;
++		double digitalGain;
+ 		bool valid;
+ 	} agc;
+ 
