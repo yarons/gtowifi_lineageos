@@ -1,0 +1,147 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: Exposure compensation for the software ISP and its Android HAL support
+
+Soft IPA: the Agc algorithm registers ExposureValue (-2.0 to 2.0) and moves
+the target of its regulation by it. The mean sample value it regulates is
+not proportional to the exposure, so a unit is not an exact photographic
+stop; the value is reported back in the metadata.
+
+Android HAL: cameras with controls::ExposureValue report a compensation
+range in steps of 1/2 EV instead of [0, 0], AE_EXPOSURE_COMPENSATION is
+translated to ExposureValue and echoed in the results. The brightness slider
+of camera applications did nothing before.
+---
+--- a/src/android/camera_capabilities.cpp
++++ b/src/android/camera_capabilities.cpp
+@@ -997,15 +997,24 @@
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AE_AVAILABLE_MODES,
+ 				  aeAvailableModes);
+ 
++	/* Exposure compensation in steps of 1/2 EV, for cameras that have it. */
+ 	std::vector<int32_t> aeCompensationRange = {
+ 		0, 0,
+ 	};
++	camera_metadata_rational_t aeCompensationStep[] = {
++		{ 0, 1 }
++	};
++	const auto exposureValueInfo = camera_->controls().find(&controls::ExposureValue);
++	if (exposureValueInfo != camera_->controls().end()) {
++		aeCompensationRange = {
++			static_cast<int32_t>(exposureValueInfo->second.min().get<float>() * 2),
++			static_cast<int32_t>(exposureValueInfo->second.max().get<float>() * 2),
++		};
++		aeCompensationStep[0] = { 1, 2 };
++	}
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AE_COMPENSATION_RANGE,
+ 				  aeCompensationRange);
+ 
+-	const camera_metadata_rational_t aeCompensationStep[] = {
+-		{ 0, 1 }
+-	};
+ 	staticMetadata_->addEntry(ANDROID_CONTROL_AE_COMPENSATION_STEP,
+ 				  aeCompensationStep);
+ 
+--- a/src/android/camera_device.cpp
++++ b/src/android/camera_device.cpp
+@@ -909,6 +909,11 @@
+ 		controls.set(controls::draft::FaceDetectMode, data[0]);
+ 	}
+ 
++	/* Exposure compensation, in steps of 1/2 EV, for cameras that have it. */
++	if (camera_->controls().count(&controls::ExposureValue) &&
++	    settings.getEntry(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION, &entry))
++		controls.set(controls::ExposureValue, *entry.data.i32 / 2.0f);
++
+ 	/* Autofocus, for cameras that have it. */
+ 	if (camera_->controls().count(&controls::AfMode)) {
+ 		if (settings.getEntry(ANDROID_CONTROL_AF_MODE, &entry)) {
+@@ -1617,6 +1622,9 @@
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AE_ANTIBANDING_MODE, value);
+ 
+ 	int32_t value32 = 0;
++	if (camera_->controls().count(&controls::ExposureValue) &&
++	    settings.getEntry(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION, &entry))
++		value32 = *entry.data.i32;
+ 	resultMetadata->addEntry(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION,
+ 				 value32);
+ 
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -61,16 +61,46 @@
+  */
+ static constexpr float kExpMaxStep = 0.15;
+ 
++/*
++ * Exposure compensation. The mean sample value is not proportional to the
++ * exposure, so an exposure value is no exact photographic stop here: it moves
++ * the target of the regulation, by an amount that keeps the target inside the
++ * range where the regulation works.
++ */
++static constexpr float kExposureValueMax = 2.0;
++static constexpr float kExposureValueStep = 0.6;
++
+ Agc::Agc()
+ {
+ }
+ 
++int Agc::init(IPAContext &context,
++	      [[maybe_unused]] const ValueNode &tuningData)
++{
++	context.ctrlMap[&controls::ExposureValue] =
++		ControlInfo(-kExposureValueMax, kExposureValueMax, 0.0f);
++
++	return 0;
++}
++
++void Agc::queueRequest([[maybe_unused]] IPAContext &context,
++		       [[maybe_unused]] const uint32_t frame,
++		       [[maybe_unused]] IPAFrameContext &frameContext,
++		       const ControlList &controls)
++{
++	const auto &exposureValue = controls.get(controls::ExposureValue);
++	if (exposureValue)
++		exposureValue_ = std::clamp(*exposureValue, -kExposureValueMax,
++					    kExposureValueMax);
++}
++
+ void Agc::updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV)
+ {
+ 	int32_t &exposure = frameContext.sensor.exposure;
+ 	double &again = frameContext.sensor.gain;
+ 
+-	double error = kExposureOptimal - exposureMSV;
++	double error = kExposureOptimal + exposureValue_ * kExposureValueStep -
++		       exposureMSV;
+ 
+ 	if (std::abs(error) <= kExposureSatisfactory)
+ 		return;
+@@ -134,6 +164,7 @@
+ 		context.configuration.agc.lineDuration * frameContext.sensor.exposure;
+ 	metadata.set(controls::ExposureTime, exposureTime.get<std::micro>());
+ 	metadata.set(controls::AnalogueGain, frameContext.sensor.gain);
++	metadata.set(controls::ExposureValue, exposureValue_);
+ 
+ 	if (!context.activeState.agc.valid) {
+ 		/*
+--- a/src/ipa/simple/algorithms/agc.h
++++ b/src/ipa/simple/algorithms/agc.h
+@@ -19,6 +19,10 @@
+ 	Agc();
+ 	~Agc() = default;
+ 
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++	void queueRequest(IPAContext &context, const uint32_t frame,
++			  IPAFrameContext &frameContext,
++			  const ControlList &controls) override;
+ 	void process(IPAContext &context, const uint32_t frame,
+ 		     IPAFrameContext &frameContext,
+ 		     const SwIspStats *stats,
+@@ -26,6 +30,8 @@
+ 
+ private:
+ 	void updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV);
++
++	float exposureValue_ = 0.0f;
+ };
+ 
+ } /* namespace ipa::soft::algorithms */
