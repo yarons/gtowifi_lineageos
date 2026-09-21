@@ -41,7 +41,13 @@ BOARD_KERNEL_CMDLINE := \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
     console=tty0 \
-    lk2nd.pass-ramoops=zap
+    lk2nd.pass-ramoops=zap \
+    panic=5
+
+# panic=5: reboot five seconds after a panic. The default, 0, leaves a panicked kernel sitting there:
+# the tablet looks frozen, still enumerates on USB, and only the Power + Volume Down combination gets
+# it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
+# (fastboot oem ramoops console, fastboot get_staged).
 
 # TODO: write sepolicy for the mainline services, then drop this
 BOARD_KERNEL_CMDLINE += \
