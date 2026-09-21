@@ -4,8 +4,8 @@ Device tree for the SM-T290 (`gtowifi`, Qualcomm SDM429) running a **mainline Li
 Samsung's 4.9 vendor kernel. Product name `gtowifi_mainline`. UNOFFICIAL, not affiliated with the
 official `gtowifi` LineageOS builds.
 
-> **State: boots to the launcher from the eMMC (first boot 2026-09-20), software rendered, SELinux
-> permissive. Not a daily driver.** Derived from the `mi439_mainline` target of
+> **State: boots to the launcher from the eMMC (first boot 2026-09-20), real display driver and GPU
+> rendering, Wi-Fi, sound, sensors and both cameras work, SELinux permissive. Not a daily driver.** Derived from the `mi439_mainline` target of
 > `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439: same kernel fork, same lk2nd
 > platform, same touchscreen and Wi-Fi/Bluetooth drivers). Started with `fastboot boot` from lk2nd; the
 > combined boot image in the BOOT partition is still untried. See the hardware table for what was
@@ -28,7 +28,7 @@ eBPF features its 4.9 kernel does not have.
 
 | Path | URL | Branch |
 |---|---|---|
-| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/battery-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads) | 7.1.3 |
+| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/display-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads, 12nm DSI PHY, ILI9881C panel, GPU). Not pushed there yet: the cameras (sensor drivers, lens, CAMSS board nodes), the 2.4 GHz Wi-Fi fix and the two DRM fixes named in the hardware table | 7.1.3 |
 
 Patches needed on top, from `kernel/common-patches` (`main-kernel/android-mainline`), exactly as for the
 other msm89x7 targets of the stack:
@@ -48,23 +48,24 @@ other 12 are clang-only or exist only in the Android common kernel.
 
 ## Hardware
 
-Seen on the tablet on 2026-09-20 unless marked otherwise.
+Seen on the tablet on 2026-09-20 and 2026-09-21 unless marked otherwise.
 
 | | Kernel | Android |
 |---|---|---|
 | Boot, eMMC, USB gadget (adb, MTP), touchscreen, keys | works | works |
 | SD card | works | untested |
-| Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. 5 GHz works. Joining a 2.4 GHz BSS is rejected by the firmware (`hal_join`/`hal_config_bss` -5), and after such a failed join the next 5 GHz link drops within seconds; open kernel issue. `qcom,wcn3680` as iris variant is wrong for this unit | connects (WPA2); WPA2/WPA3 transition networks need the overlay in `rro_overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
+| Wi-Fi (WCN3660B) | firmware read from the tablet's `apnhlos` and `persist` partitions. 5 GHz and 2.4 GHz work. 2.4 GHz needs the kernel change that stops advertising 40 MHz channels on that band: the firmware rejects the join otherwise (`hal_join`/`hal_config_bss` -5), and the next 5 GHz link drops within seconds. `qcom,wcn3680` as iris variant is wrong for this unit | connects (WPA2); WPA2/WPA3 transition networks need the overlay in `rro_overlays/` that keeps Android from upgrading to SAE, because wcn36xx has no 802.11w |
 | Bluetooth | works under postmarketOS | untested |
-| Display | bootloader framebuffer through simpledrm; a driver for the SDM429 12nm DSI PHY + panel exists in the kernel bring-up tree, not used here yet | software rendering (`TARGET_USES_FRAMEBUFFER_DISPLAY`, ANGLE on SwiftShader). Needs `patches/hardware/libhardware` or red and blue are swapped. `system_server` sometimes times out waiting for the display at start and is restarted |
-| GPU (Adreno 504, driven as A505) | not enabled | - |
-| Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback and the built-in microphone work | tinyhal, `audio/audio.gtowifi_mainline.xml`: speakers work; microphone, headphone jack and headset untested |
+| Display | drm/msm MDP5 with a driver for the SDM429 12nm DSI PHY and the ILI9881C panel. No backlight node yet: the brightness stays where the boot loader left it. Android needs two fixes: drm/msm leaked the GEM objects of clients without their own GPU address space (`msm_gem_close`), and `fence_to_crtc()` races with the signalling of a CRTC out-fence, a kernel BUG after a few hours because Android reads `SYNC_IOC_FILE_INFO` of every out-fence | drm_hwcomposer + minigbm. `mdp5_crtc_atomic_check: too many planes` in the kernel log is harmless (3 blend stages, the composer falls back to the GPU) |
+| GPU (Adreno 504, driven as A505) | drm/msm | Mesa freedreno, OpenGL ES 3.1 (`FD505`) |
+| Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback and the built-in microphone work | tinyhal, `audio/audio.gtowifi_mainline.xml`: speakers and the built-in microphone work (videos have sound). Software noise suppression and gain control for the microphone are configured (`audio/audio_effects.xml`) but not verified; headphone jack and headset untested |
 | Battery, charging (PMI632) | SMB5 charger + fuel gauge (level, voltage, OCV, current, charge) | real level, voltage, temperature and charger state through the default health AIDL HAL |
 | Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`); no gyroscope | IIO sensors HAL: both work, auto-rotate works. Needs the ueventd rules, the HAL restart after the ADSP is up and the axis properties of this tree |
 | Suspend | off | off |
-| Camera, GNSS | nothing | nothing |
+| Cameras (GC8034 rear with focus motor, GC2375H front, on CAMSS) | sensor and lens drivers from the board work; raw Bayer frames through V4L2 | libcamera 0.7.2: simple pipeline handler with the software ISP (CPU), its Android HAL under the legacy camera provider, and the patches in `libcamera/patches/` (the HAL did not work with this kind of camera as it is). Preview at 21 to 24 fps (rear in the binned 1624x1224 mode; the 8 MP mode gives about 5 fps and is switched off in `libcamera/camera_hal.yaml`), photos (rear 2 MP), video 640x480 with sound, continuous autofocus and tap to focus, exposure compensation. No colour correction matrix and no noise reduction: pure colours are pale and low light is noisy. 720p video untested |
+| GNSS | bring-up in progress | nothing |
 | SELinux | | permissive |
-| RAM | | tight (1.9 GB, software rendering in every process). zram needs the init script of this tree: `swapon_all` fails on current kernels |
+| RAM | | tight (1.9 GB). zram needs the init script of this tree: `swapon_all` fails on current kernels |
 
 No proprietary files are part of the build. Radio, DSP and codec firmware is loaded from the tablet's
 own partitions; GPU microcode comes from linux-firmware.
