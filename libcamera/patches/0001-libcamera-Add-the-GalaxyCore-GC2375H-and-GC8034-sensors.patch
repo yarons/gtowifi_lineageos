@@ -1,7 +1,7 @@
 From: Yaron Shahrabani <yarons@users.noreply.github.com>
 Subject: [PATCH] libcamera: Add the GalaxyCore GC2375H and GC8034 sensors
 
-Sensor helper (linear analogue gain in 1/64 steps, black level 64 at 10 bits)
+Sensor helper (linear analogue gain in 1/64 steps; no fixed black level, it rises with the gain)
 and static properties for the two cameras of the Samsung Galaxy Tab A 8.0
 2019. Values from the kernel drivers and from raw frames of the tablet.
 ---
@@ -9,7 +9,7 @@ diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sen
 index 9457d62b3..3f977f412 100644
 --- a/src/ipa/libipa/camera_sensor_helper.cpp
 +++ b/src/ipa/libipa/camera_sensor_helper.cpp
-@@ -496,6 +496,32 @@ private:
+@@ -496,6 +496,38 @@ private:
  };
  REGISTER_CAMERA_SENSOR_HELPER("ar0521", CameraSensorHelperAr0521)
  
@@ -18,8 +18,11 @@ index 9457d62b3..3f977f412 100644
 +public:
 +	CameraSensorHelperGc2375h()
 +	{
-+		/* 64 at 10 bits, measured on raw frames of an SM-T290. */
-+		blackLevel_ = 4096;
++		/*
++		 * No fixed black level: it is 64 at 10 bits with a gain of
++		 * 1 but rises with the analogue gain (measured on raw frames
++		 * of an SM-T290), so leave it to the automatic estimation.
++		 */
 +		/* The driver's analogue gain control is in 1/64 steps. */
 +		gain_ = AnalogueGainLinear{ 1, 0, 0, 64 };
 +	}
@@ -31,8 +34,11 @@ index 9457d62b3..3f977f412 100644
 +public:
 +	CameraSensorHelperGc8034()
 +	{
-+		/* 64 at 10 bits, measured on raw frames of an SM-T290. */
-+		blackLevel_ = 4096;
++		/*
++		 * No fixed black level: it is 64 at 10 bits with a gain of
++		 * 1 but rises with the analogue gain (measured on raw frames
++		 * of an SM-T290), so leave it to the automatic estimation.
++		 */
 +		/* The driver's analogue gain control is in 1/64 steps. */
 +		gain_ = AnalogueGainLinear{ 1, 0, 0, 64 };
 +	}
