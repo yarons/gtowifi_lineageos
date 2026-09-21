@@ -21,7 +21,8 @@ TARGET_HEALTH_HAL := default-aidl
 TARGET_SUPPORTS_SUSPEND := false
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
-# No backlight node yet: brightness stays where the boot loader left it.
+# Backlight: pwm-backlight on the PM8953 PWM, /sys/class/backlight/backlight, which the stack's lights
+# HAL looks for first (in the kernel since export r9; the slider has not been tried under Android).
 # Sensors: accelerometer and proximity sit behind the ADSP; the kernel exposes them as IIO devices through
 # IIO_QCOM_SMGR_* once the ADSP runs and has its registry (persist/sensors/sns.reg)
 TARGET_SENSORS_HAL := iio
