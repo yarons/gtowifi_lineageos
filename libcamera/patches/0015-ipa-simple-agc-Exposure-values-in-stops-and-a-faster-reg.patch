@@ -1,0 +1,103 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: agc: Exposure values in stops and a faster regulation
+
+Moving the target of the regulation by a fixed amount per exposure value
+turned out far too weak: the whole range of -1.5 to +1.5 changed the
+exposure by a factor of 1.9 where it should be 8, and the picture followed
+over seconds. On the device this read as "the slider does nothing".
+
+Regulate on the histogram of a scene 2^-EV times as bright as the real one
+instead, so that the exposure settles at 2^EV times the usual one; the
+digital gain is searched the same way. Double the proportional gain and
+raise the maximum step to 25%: the statistics only arrive every fourth
+frame, so each step sees the effect of the one before.
+---
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -53,22 +53,20 @@
+  * This replaces the fixed 10% bang-bang step with a proportional correction
+  * that converges smoothly and avoids overshooting near the target.
+  */
+-static constexpr float kExpProportionalGain = 0.04;
++static constexpr float kExpProportionalGain = 0.08;
+ 
+ /*
+  * Maximum multiplicative step per frame, to bound the correction when the
+  * scene changes dramatically.
+  */
+-static constexpr float kExpMaxStep = 0.15;
++static constexpr float kExpMaxStep = 0.25;
+ 
+ /*
+- * Exposure compensation. The mean sample value is not proportional to the
+- * exposure, so an exposure value is no exact photographic stop here: it moves
+- * the target of the regulation, by an amount that keeps the target inside the
+- * range where the regulation works.
++ * Exposure compensation, in stops. The regulation is given the histogram of a
++ * scene 2^-EV times as bright as the real one, so that it settles at an
++ * exposure 2^EV times the usual one.
+  */
+ static constexpr float kExposureValueMax = 2.0;
+-static constexpr float kExposureValueStep = 0.6;
+ 
+ /*
+  * Digital gain, applied by the software ISP with the colour gains, for scenes
+@@ -116,8 +114,7 @@
+ 	int32_t &exposure = frameContext.sensor.exposure;
+ 	double &again = frameContext.sensor.gain;
+ 
+-	double error = kExposureOptimal + exposureValue_ * kExposureValueStep -
+-		       exposureMSV;
++	double error = kExposureOptimal - exposureMSV;
+ 
+ 	if (std::abs(error) <= kExposureSatisfactory)
+ 		return;
+@@ -237,15 +234,11 @@
+ 		num += exposureBins[i] * (i + 1);
+ 	}
+ 
+-	float exposureMSV = (denom == 0 ? 0 : static_cast<float>(num) / denom);
+-	updateExposure(context, frameContext, exposureMSV);
++	LOG(IPASoftExposure, Debug)
++		<< "MSV of the raw picture "
++		<< (denom == 0 ? 0 : static_cast<float>(num) / denom);
+ 
+-	/*
+-	 * The statistics are those of the raw picture, the digital gain does
+-	 * not show in them: find the gain that would bring the mean sample
+-	 * value to the target, by applying it to the histogram. Only when the
+-	 * sensor can do no more.
+-	 */
++	/* The mean sample value of the picture multiplied by a gain. */
+ 	auto msvWithGain = [&](float gain) {
+ 		unsigned int bins[kExposureBinsCount] = {};
+ 		for (unsigned int i = 0; i < histogramSize; i++) {
+@@ -264,7 +257,18 @@
+ 		return d == 0 ? 0.0f : static_cast<float>(n) / d;
+ 	};
+ 
+-	const float target = kExposureOptimal + exposureValue_ * kExposureValueStep;
++	/* Exposure compensation: regulate on a scene 2^-EV times as bright. */
++	const float evScale = std::pow(2.0f, -exposureValue_);
++	const float exposureMSV = msvWithGain(evScale);
++	updateExposure(context, frameContext, exposureMSV);
++
++	/*
++	 * The statistics are those of the raw picture, the digital gain does
++	 * not show in them: find the gain that would bring the mean sample
++	 * value to the target, by applying it to the histogram. Only when the
++	 * sensor can do no more.
++	 */
++	const float target = kExposureOptimal;
+ 	const bool sensorAtMax =
+ 		frameContext.sensor.exposure >= context.configuration.agc.exposureMax &&
+ 		frameContext.sensor.gain >= context.configuration.agc.againMax -
+@@ -275,7 +279,7 @@
+ 		float high = kDigitalGainMax;
+ 		for (unsigned int i = 0; i < 8; i++) {
+ 			const float middle = (low + high) / 2;
+-			if (msvWithGain(middle) < target)
++			if (msvWithGain(middle * evScale) < target)
+ 				low = middle;
+ 			else
+ 				high = middle;
