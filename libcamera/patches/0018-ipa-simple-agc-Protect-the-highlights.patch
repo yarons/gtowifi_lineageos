@@ -1,0 +1,108 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: agc: Protect the highlights
+
+The regulation only looks at the mean sample value. In a mostly dark scene
+with a bright part (a window, a laptop screen) it raises the exposure, and
+the digital gain after it, until the bright part is plain white.
+
+Keep the share of the samples at the top of the range below 1% for the raw
+picture (it counts as too bright in proportion to the excess, and with half
+of that the exposure may stay but not rise, so that the regulation does not
+swing around the limit) and below 3% after the digital gain. The exposure
+value moves both limits, so the application can still ask for a brighter
+picture at the price of the highlights.
+---
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -76,6 +76,18 @@
+ static constexpr float kDigitalGainMax = 6.0;
+ static constexpr float kDigitalGainSpeed = 0.25;
+ 
++/*
++ * Highlight protection. A regulation on the mean alone lets a bright part of a
++ * mostly dark scene (a window, a screen) clip to white. The share of the
++ * samples at the top of the range is kept below these limits: the first one
++ * for the raw picture, by the exposure and the analogue gain, the second one
++ * for the picture with the digital gain. The exposure value moves them, two
++ * stops of it by a factor of 16.
++ */
++static constexpr float kRawClipLimit = 0.01;
++static constexpr float kClipLimit = 0.03;
++static constexpr float kClipPenalty = 10.0;
++
+ Agc::Agc()
+ {
+ }
+@@ -266,9 +278,41 @@
+ 		return d == 0 ? 0.0f : static_cast<float>(n) / d;
+ 	};
+ 
++	/* The share of the samples that reach the top of the range with a gain. */
++	auto clippedWithGain = [&](float gain) {
++		const unsigned int top = histogramSize > 2 ? histogramSize - 2 : histogramSize;
++		uint64_t clipped = 0;
++		uint64_t total = 0;
++		for (unsigned int i = 0; i < histogramSize; i++) {
++			total += histogram[blackLevelHistIdx + i];
++			if (i * gain >= top)
++				clipped += histogram[blackLevelHistIdx + i];
++		}
++
++		return total == 0 ? 0.0f : static_cast<float>(clipped) / total;
++	};
++
++	const float clipScale = std::pow(4.0f, exposureValue_);
++	const float rawClipLimit = std::clamp(kRawClipLimit * clipScale, 0.001f, 0.5f);
++	const float clipLimit = std::clamp(kClipLimit * clipScale, 0.002f, 0.6f);
++
+ 	/* Exposure compensation: regulate on a scene 2^-EV times as bright. */
+ 	const float evScale = std::pow(2.0f, -exposureValue_);
+-	const float exposureMSV = msvWithGain(evScale);
++	float exposureMSV = msvWithGain(evScale);
++
++	/*
++	 * Highlight protection for the sensor: too much of the raw picture
++	 * clipped counts as too bright, in proportion, and with a little less
++	 * than that the exposure may stay but not rise.
++	 */
++	const float clippedRaw = clippedWithGain(1.0f);
++	if (clippedRaw > rawClipLimit)
++		exposureMSV = std::max(exposureMSV,
++				       exposureTarget_ + kExposureSatisfactory +
++					       (clippedRaw - rawClipLimit) * kClipPenalty);
++	else if (clippedRaw > rawClipLimit / 2 && exposureMSV < exposureTarget_)
++		exposureMSV = exposureTarget_;
++
+ 	updateExposure(context, frameContext, exposureMSV);
+ 
+ 	/*
+@@ -294,13 +338,28 @@
+ 				high = middle;
+ 		}
+ 		desired = low;
++
++		/* No more digital gain than the highlights allow. */
++		if (clippedWithGain(desired) > clipLimit) {
++			low = 1.0f;
++			high = desired;
++			for (unsigned int i = 0; i < 8; i++) {
++				const float middle = (low + high) / 2;
++				if (clippedWithGain(middle) > clipLimit)
++					high = middle;
++				else
++					low = middle;
++			}
++			desired = low;
++		}
+ 	}
+ 
+ 	digitalGain_ += (desired - digitalGain_) * kDigitalGainSpeed;
+ 	context.activeState.agc.digitalGain = digitalGain_;
+ 
+ 	LOG(IPASoftExposure, Debug)
+-		<< "digital gain " << digitalGain_ << " (wanted " << desired << ")";
++		<< "digital gain " << digitalGain_ << " (wanted " << desired
++		<< "), clipped " << clippedRaw << " of the raw picture";
+ }
+ 
+ REGISTER_IPA_ALGORITHM(Agc, "Agc")
