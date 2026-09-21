@@ -16,6 +16,8 @@ algorithms:
   - Agc:
       # libcamera's default of 2.5 is an overexposed, pale picture once the digital gain can reach it.
       exposureTarget: 1.8
+      # 6 is very noisy on top of the sensor's 16: there is no noise reduction.
+      maxDigitalGain: 4.0
   - Af:
       startPosition: 320
       coarseStep: 48

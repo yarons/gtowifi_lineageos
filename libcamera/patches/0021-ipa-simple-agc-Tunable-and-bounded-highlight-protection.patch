@@ -1,0 +1,81 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: agc: Tunable and bounded highlight protection
+
+With a window behind the subject the highlight protection kept lowering the
+exposure for the window and left the room in the dark. Let it take the mean
+sample value only so far below the target ("protectionDepth", 0.5 by
+default), and make the clip limits ("rawClipLimit", "clipLimit") and the
+maximum digital gain ("maxDigitalGain") tuning keys: a front camera, usually
+pointed at a face with a bright background, wants more tolerance than a
+rear camera.
+---
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -104,6 +104,18 @@
+ 	exposureTarget_ = std::clamp(tuningData["exposureTarget"].get<float>(kExposureOptimal),
+ 				     1.0f, static_cast<float>(kExposureBinsCount));
+ 
++	/*
++	 * Highlight protection: the shares of clipped samples tolerated in the
++	 * raw picture and after the digital gain, and how far below the target
++	 * the protection may take the mean sample value. Without that bound a
++	 * window behind the subject leaves the subject in the dark.
++	 */
++	rawClipLimit_ = std::clamp(tuningData["rawClipLimit"].get<float>(kRawClipLimit), 0.0f, 1.0f);
++	clipLimit_ = std::clamp(tuningData["clipLimit"].get<float>(kClipLimit), 0.0f, 1.0f);
++	protectionDepth_ = std::max(tuningData["protectionDepth"].get<float>(0.5f), 0.0f);
++	maxDigitalGain_ = std::clamp(tuningData["maxDigitalGain"].get<float>(kDigitalGainMax),
++				     1.0f, 16.0f);
++
+ 	context.ctrlMap[&controls::ExposureValue] =
+ 		ControlInfo(-kExposureValueMax, kExposureValueMax, 0.0f);
+ 
+@@ -293,8 +305,8 @@
+ 	};
+ 
+ 	const float clipScale = std::pow(4.0f, exposureValue_);
+-	const float rawClipLimit = std::clamp(kRawClipLimit * clipScale, 0.001f, 0.5f);
+-	const float clipLimit = std::clamp(kClipLimit * clipScale, 0.002f, 0.6f);
++	const float rawClipLimit = std::clamp(rawClipLimit_ * clipScale, 0.001f, 0.5f);
++	const float clipLimit = std::clamp(clipLimit_ * clipScale, 0.002f, 0.6f);
+ 
+ 	/* Exposure compensation: regulate on a scene 2^-EV times as bright. */
+ 	const float evScale = std::pow(2.0f, -exposureValue_);
+@@ -312,11 +324,13 @@
+ 	const float clippedRaw = std::max(clippedWithGain(1.0f),
+ 					  samples ? static_cast<float>(stats->clipped) / samples
+ 						  : 0.0f);
+-	if (clippedRaw > rawClipLimit)
++	const bool mayProtect = exposureMSV > exposureTarget_ - protectionDepth_;
++	if (clippedRaw > rawClipLimit && mayProtect)
+ 		exposureMSV = std::max(exposureMSV,
+ 				       exposureTarget_ + kExposureSatisfactory +
+ 					       (clippedRaw - rawClipLimit) * kClipPenalty);
+-	else if (clippedRaw > rawClipLimit / 2 && exposureMSV < exposureTarget_)
++	else if (clippedRaw > rawClipLimit / 2 && exposureMSV < exposureTarget_ &&
++		 (mayProtect || clippedRaw > rawClipLimit))
+ 		exposureMSV = exposureTarget_;
+ 
+ 	updateExposure(context, frameContext, exposureMSV);
+@@ -335,7 +349,7 @@
+ 	float desired = 1.0f;
+ 	if (sensorAtMax && exposureMSV < target - kExposureSatisfactory) {
+ 		float low = 1.0f;
+-		float high = kDigitalGainMax;
++		float high = maxDigitalGain_;
+ 		for (unsigned int i = 0; i < 8; i++) {
+ 			const float middle = (low + high) / 2;
+ 			if (msvWithGain(middle * evScale) < target)
+--- a/src/ipa/simple/algorithms/agc.h
++++ b/src/ipa/simple/algorithms/agc.h
+@@ -33,6 +33,10 @@
+ 	void updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV);
+ 
+ 	float exposureTarget_;
++	float rawClipLimit_;
++	float clipLimit_;
++	float protectionDepth_;
++	float maxDigitalGain_;
+ 	float exposureValue_ = 0.0f;
+ 	float digitalGain_ = 1.0f;
+ };

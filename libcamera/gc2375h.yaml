@@ -13,6 +13,10 @@ algorithms:
       saturation: 1.6
   - Agc:
       # libcamera's default of 2.5 is an overexposed, pale picture once the digital gain can reach it.
-      exposureTarget: 1.8
+      exposureTarget: 2.1
+      # A front camera mostly sees a face in front of a window or a lamp: tolerate more clipping.
+      rawClipLimit: 0.04
+      clipLimit: 0.08
+      maxDigitalGain: 4.0
   - Af:
 ...
