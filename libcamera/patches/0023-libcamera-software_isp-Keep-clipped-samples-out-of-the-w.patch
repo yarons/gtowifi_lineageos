@@ -1,0 +1,55 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: software_isp: Keep clipped samples out of the white
+ balance
+
+The white balance of the simple IPA is a grey world over the colour sums of
+all sampled pixels. A clipped sample has the same value in every channel,
+whatever its colour was: a lamp, a window or a display in the picture pulls
+the gains towards 1, and the rest of the picture turns green. Seen with the
+front camera of the SM-T290, which looks at ceiling lamps and windows most of
+the time.
+
+Count such samples as before, but leave them out of the sums, and subtract the
+black level for the samples that are in the sums only.
+---
+--- a/src/ipa/simple/algorithms/awb.cpp
++++ b/src/ipa/simple/algorithms/awb.cpp
+@@ -69,8 +69,10 @@
+ 	 * would be off if they were computed from the whole brightness range
+ 	 * rather than from the sensor range.
+ 	 */
+-	const uint64_t nPixels = std::accumulate(
++	const uint64_t nSamples = std::accumulate(
+ 		histogram.begin(), histogram.end(), uint64_t(0));
++	/* Clipped samples are in the histogram but not in the colour sums */
++	const uint64_t nPixels = nSamples - std::min<uint64_t>(stats->clipped, nSamples);
+ 	const uint64_t offset = blackLevel * nPixels;
+ 	const uint64_t minValid = 1;
+ 	/*
+--- a/src/libcamera/software_isp/swstats_cpu.cpp
++++ b/src/libcamera/software_isp/swstats_cpu.cpp
+@@ -188,12 +188,19 @@
+ 	uint32_t clippedCount = 0;
+ 
+ #define SWSTATS_ACCUMULATE_LINE_STATS(div) \
+-	sumR += r;                         \
+-	sumG += g;                         \
+-	sumB += b;                         \
+-                                           \
+-	if (r >= 248 * (div) || g >= 248 * (div) || b >= 248 * (div)) \
++	/*                                 \
++	 * A clipped sample has lost its colour: a lamp or a window reads  \
++	 * the same in all channels, and would pull the white balance     \
++	 * towards "no correction", which is green. Keep it out of the    \
++	 * colour sums.                    \
++	 */                                \
++	if (r >= 248 * (div) || g >= 248 * (div) || b >= 248 * (div)) { \
+ 		clippedCount++;            \
++	} else {                           \
++		sumR += r;                 \
++		sumG += g;                 \
++		sumB += b;                 \
++	}                                  \
+                                            \
+ 	yVal = r * kRedYMul;               \
+ 	yVal += g * kGreenYMul;            \

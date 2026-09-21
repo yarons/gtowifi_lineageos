@@ -6,7 +6,13 @@
 ---
 version: 1
 algorithms:
+  # The automatic estimate takes the darkest few percent of a 64 bin histogram: in a dim room (the
+  # sensor at its maximum gain, where the noise spreads the dark pixels) it comes out as 12 of 255,
+  # too low, and the digital gain of the auto exposure turns what is left into haze, green
+  # highlights and magenta shadows. Measured on the test chart: shadows are neutral with 14 of 255
+  # (16, the nominal 64 of 1023, already clips red and blue in the shadows). 16 bit scale.
   - BlackLevel:
+      blackLevel: 3584
   - Awb:
   - Adjust:
       # No colour correction matrix (too slow on the CPU): the raw colours are pale.
