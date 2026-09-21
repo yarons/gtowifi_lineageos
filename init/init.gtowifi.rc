@@ -24,8 +24,28 @@ on property:sys.bootstat.first_boot_completed=1
 # wcnss/adsp probe before /vendor/firmware_mnt exists and do not retry, so they are started
 # again once the firmware partition is mounted
 on post-fs
+    # Firmware of the modem DSP (mba.mbn, modem.mdt, modem.bNN), see "GNSS" below
+    mkdir /mnt/vendor/modem_firmware 0555 root root
+    mount vfat /dev/block/by-name/modem /mnt/vendor/modem_firmware ro shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_mnt_file:s0
+
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -s -d /vendor/lib/modules --all=/vendor/etc/modules.load.normal
     trigger start_all_remoteproc
+
+# GNSS
+# This Wi-Fi model has a modem DSP too: it runs the location engine, which the GNSS HAL reaches
+# with QMI over QRTR. The modem wants its remote file system first. The stack's rmtfs service
+# serves the EFS partitions read-only (-r: what the modem writes stays in memory, the eMMC is never
+# written) and starts and stops the modem itself (-s), which is why start_all_remoteproc has to
+# leave it alone (vendor.remoteproc.4080000_remoteproc.ignore). Kernels without the modem in
+# their device tree have no such remoteproc: nothing is started then.
+on boot
+    start vendor.gtowifi-modem
+
+service vendor.gtowifi-modem /vendor/bin/sh /vendor/bin/init.gtowifi.modem.sh
+    user root
+    group root system
+    oneshot
+    disabled
 
 # Sensors
 # The accelerometer and proximity sensor are IIO devices of the ADSP's sensor manager; they appear a

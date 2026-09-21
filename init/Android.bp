@@ -17,6 +17,12 @@ prebuilt_etc {
     recovery: true,
 }
 
+sh_binary {
+    name: "init.gtowifi.modem.sh",
+    src: "init.gtowifi.modem.sh",
+    vendor: true,
+}
+
 prebuilt_etc {
     name: "ueventd.gtowifi.rc",
     src: "ueventd.gtowifi.rc",

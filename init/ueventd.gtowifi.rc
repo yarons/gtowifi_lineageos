@@ -5,6 +5,8 @@
 
 # Firmware comes from the tablet's own apnhlos partition; nothing proprietary is in the build
 firmware_directories /vendor/firmware_mnt/image/ /odm/firmware/
+# The modem DSP (GNSS engine): the tablet's modem partition
+firmware_directories /mnt/vendor/modem_firmware/image/ /mnt/vendor/modem_firmware/
 
 modalias_handling enabled
 

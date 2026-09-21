@@ -1,0 +1,31 @@
+//
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+// GNSS HAL for Qualcomm modems on a mainline kernel: the location engine runs on the modem DSP and
+// is reached with QMI LOC over QRTR. No proprietary library is involved.
+cc_binary {
+    name: "android.hardware.gnss-service.qmiloc",
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.gnss-service.qmiloc.rc"],
+    vintf_fragments: ["android.hardware.gnss-service.qmiloc.xml"],
+    srcs: [
+        "Gnss.cpp",
+        "QmiLoc.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.gnss-V6-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "liblog",
+        "libutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+    ],
+}

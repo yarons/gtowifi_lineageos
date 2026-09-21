@@ -20,6 +20,10 @@ qcom_pd_mapper
 qcom_pdr_msg
 pdr_interface
 
+# Modem DSP (GNSS engine); firmware mba.mbn and modem.* comes from the modem partition. Without the
+# modem in the device tree the drivers load and find nothing to bind to.
+qcom_q6v5_mss
+qcom_memshare
 # Sensors behind the ADSP (QMI Sensor Manager over QRTR)
 qcom_sns_reg
 sns_smgr

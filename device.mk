@@ -85,6 +85,20 @@ TARGET_BOOTANIMATION_HALF_RES := true
 # Dalvik heap
 $(call inherit-product, frameworks/native/build/tablet-7in-hdpi-1024-dalvik-heap.mk)
 
+# GNSS: the location engine runs on the modem DSP. rmtfs (read-only, see init.gtowifi.rc) has to
+# serve the modem before it boots; the HAL speaks QMI LOC over QRTR
+PRODUCT_PACKAGES += \
+    android.hardware.gnss-service.qmiloc \
+    init.gtowifi.modem.sh \
+    rmtfs \
+    rmtfs.rc
+
+PRODUCT_VENDOR_PROPERTIES += \
+    vendor.remoteproc.4080000_remoteproc.ignore=1
+
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
+
 # HIDL
 PRODUCT_PACKAGES += \
     vndservicemanager

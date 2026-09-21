@@ -1,0 +1,4 @@
+service vendor.gnss-qmiloc /vendor/bin/hw/android.hardware.gnss-service.qmiloc
+    class hal
+    user gps
+    group gps system
