@@ -110,6 +110,10 @@ PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
 PRODUCT_PACKAGES += \
     modules.load.normal
 
+# Media: camcorder profiles up to 720p with AAC audio; overrides mainline/qcom-common's 480p ones
+PRODUCT_PACKAGES += \
+    media_profiles.gtowifi_mainline.xml
+
 # Overlays
 DEVICE_PACKAGE_OVERLAYS += \
     $(DEVICE_PATH)/overlays/overlay

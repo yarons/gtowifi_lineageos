@@ -1,0 +1,84 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] android: Let the HAL configuration file pin the camera ids
+
+Internal cameras get their Android camera ids in the order in which libcamera
+enumerates them. With two sensors behind one CAMSS that order changes from
+boot to boot, so "camera 0" is sometimes the front camera. Applications
+remember camera ids, and media_profiles.xml is indexed by them.
+
+Optional per-camera property "id". An id is never handed out twice: a camera
+whose id is taken, or that has none, gets the lowest free one.
+---
+--- a/src/android/camera_hal_config.cpp
++++ b/src/android/camera_hal_config.cpp
+@@ -116,6 +116,14 @@
+ 		cameraConfigData.maxHeight = cameraObject["maxHeight"].get<uint32_t>(0);
+ 	}
+ 
++	/*
++	 * Parse the optional property "id", the Android camera id of an
++	 * internal camera. Without it the ids follow the order in which the
++	 * cameras are enumerated, which is not the same on every boot.
++	 */
++	if (cameraObject.contains("id"))
++		cameraConfigData.id = cameraObject["id"].get<int32_t>(-1);
++
+ 	return 0;
+ }
+ 
+--- a/src/android/camera_hal_config.h
++++ b/src/android/camera_hal_config.h
+@@ -15,6 +15,7 @@
+ struct CameraConfigData {
+ 	int facing = -1;
+ 	int rotation = -1;
++	int id = -1;
+ 	unsigned int maxWidth = 0;
+ 	unsigned int maxHeight = 0;
+ };
+--- a/src/android/camera_hal_manager.cpp
++++ b/src/android/camera_hal_manager.cpp
+@@ -7,6 +7,8 @@
+ 
+ #include "camera_hal_manager.h"
+ 
++#include <set>
++
+ #include <libcamera/base/log.h>
+ 
+ #include <libcamera/camera.h>
+@@ -170,6 +172,34 @@
+ 		return;
+ 	}
+ 
++	/*
++	 * Internal cameras are numbered in the order of their enumeration,
++	 * which is not the same on every boot, while applications remember
++	 * camera ids and media_profiles.xml is indexed by them. Let the
++	 * configuration file pin the id, and never hand out an id twice.
++	 * Pin the ids of all internal cameras or of none: an unpinned camera
++	 * that is enumerated first takes the lowest id.
++	 */
++	if (isCameraNew && !isCameraExternal) {
++		std::set<unsigned int> usedIds;
++		for (const auto &entry : cameraIdsMap_)
++			usedIds.insert(entry.second);
++
++		if (cameraConfigData->id >= 0 &&
++		    !usedIds.count(cameraConfigData->id)) {
++			id = cameraConfigData->id;
++		} else {
++			if (cameraConfigData->id >= 0)
++				LOG(HAL, Warning)
++					<< "Camera id " << cameraConfigData->id
++					<< " of " << cam->id() << " is in use";
++
++			id = 0;
++			while (usedIds.count(id))
++				id++;
++		}
++	}
++
+ 	/* Create a CameraDevice instance to wrap the libcamera Camera. */
+ 	std::unique_ptr<CameraDevice> camera = CameraDevice::create(id, cam);
+ 
