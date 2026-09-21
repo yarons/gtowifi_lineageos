@@ -1,0 +1,66 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: af: Wait for a settled exposure before a search
+
+A search that runs while the exposure regulation is still moving, as it does
+right after the camera starts, compares pictures that can't be compared and
+locks anywhere; a scene that does not change afterwards never triggers a new
+search, and the picture stays out of focus. Seen on the device: lens left at
+the start position with a static scene.
+
+Start measuring only after two statistics with unchanged exposure and gain,
+or after two seconds.
+---
+--- a/src/ipa/simple/algorithms/af.cpp
++++ b/src/ipa/simple/algorithms/af.cpp
+@@ -230,6 +230,10 @@
+ 	reversed_ = false;
+ 	best_ = -1.0;
+ 	changed_ = 0;
++	exposureStable_ = 0;
++	exposureWaited_ = 0;
++	lastExposure_ = -1;
++	lastGain_ = -1.0;
+ 
+ 	moveTo(context, position);
+ }
+@@ -237,6 +241,25 @@
+ void Af::search(IPAContext &context, double value)
+ {
+ 	if (best_ < 0.0) {
++		/*
++		 * The contrast of pictures taken while the exposure changes,
++		 * right after the start for example, can't be compared: a
++		 * search over them ends anywhere, and a scene that does not
++		 * change never gets another one. Wait for two measurements
++		 * with the same exposure and gain, for two seconds at most.
++		 */
++		const int32_t exposure = context.activeState.agc.exposure;
++		const double gain = context.activeState.agc.again;
++		if (exposure == lastExposure_ && gain == lastGain_)
++			exposureStable_++;
++		else
++			exposureStable_ = 0;
++		lastExposure_ = exposure;
++		lastGain_ = gain;
++
++		if (exposureStable_ < 2 && exposureWaited_++ < 12)
++			return;
++
+ 		/* The first measurement, at the start position. */
+ 		best_ = value;
+ 		bestPosition_ = position_;
+--- a/src/ipa/simple/algorithms/af.h
++++ b/src/ipa/simple/algorithms/af.h
+@@ -83,6 +83,12 @@
+ 	unsigned int wait_;
+ 	unsigned int changed_;
+ 
++	/* A search only starts once the exposure has settled. */
++	int32_t lastExposure_;
++	double lastGain_;
++	unsigned int exposureStable_;
++	unsigned int exposureWaited_;
++
+ 	/* Where the last search ended, kept from one session to the next. */
+ 	std::optional<int32_t> lastLocked_;
+ };
