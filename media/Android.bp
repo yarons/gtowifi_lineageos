@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-// Replaces the 480p-only profiles of mainline/qcom-common
+// Selected with ro.media.xml_variant.profiles instead of mainline/qcom-common's 480p-only
+// media_profiles_V1_0.xml: two modules can't install the same file
 prebuilt_etc {
-    name: "media_profiles.gtowifi_mainline.xml",
+    name: "media_profiles_gtowifi.xml",
     src: "media_profiles.xml",
-    filename: "media_profiles_V1_0.xml",
+    filename: "media_profiles_gtowifi.xml",
     vendor: true,
-    overrides: ["media_profiles.xml"],
 }
