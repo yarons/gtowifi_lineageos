@@ -1,0 +1,94 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] libcamera: software_isp: Count samples with a clipped colour channel
+
+The highlight protection of the exposure regulation looked at the top of the
+luminance histogram, which only fills for white: a saturated colour with one
+channel at the limit of the sensor has a moderate luminance. Measured on a
+test chart on a bright display: pure green came out as 231/255/183.
+
+Count the sampled pixels with any channel in the top 3% of the range in the
+CPU statistics, and let the regulation use the larger of the two shares.
+---
+--- a/include/libcamera/internal/software_isp/swisp_stats.h
++++ b/include/libcamera/internal/software_isp/swisp_stats.h
+@@ -48,6 +48,12 @@
+ 	 * samples in the horizontal centre of the picture, a focus measure
+ 	 */
+ 	uint64_t sharpness;
++	/**
++	 * \brief Number of sampled pixels with a colour channel at the top of
++	 * the range of the sensor, which the luminance histogram does not show
++	 * for a saturated colour
++	 */
++	uint32_t clipped;
+ };
+ 
+ } /* namespace libcamera */
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -305,7 +305,13 @@
+ 	 * clipped counts as too bright, in proportion, and with a little less
+ 	 * than that the exposure may stay but not rise.
+ 	 */
+-	const float clippedRaw = clippedWithGain(1.0f);
++	/* A colour channel at the top of the range counts, not only white. */
++	uint64_t samples = 0;
++	for (unsigned int i = 0; i < SwIspStats::kYHistogramSize; i++)
++		samples += histogram[i];
++	const float clippedRaw = std::max(clippedWithGain(1.0f),
++					  samples ? static_cast<float>(stats->clipped) / samples
++						  : 0.0f);
+ 	if (clippedRaw > rawClipLimit)
+ 		exposureMSV = std::max(exposureMSV,
+ 				       exposureTarget_ + kExposureSatisfactory +
+--- a/src/libcamera/software_isp/swstats_cpu.cpp
++++ b/src/libcamera/software_isp/swstats_cpu.cpp
+@@ -184,13 +184,17 @@
+ 	const unsigned int afLast = window_.width * 3 / 16;  \
+ 	unsigned int sample = 0;          \
+ 	int prevY = 0;                    \
+-	uint64_t sharp = 0;
++	uint64_t sharp = 0;               \
++	uint32_t clippedCount = 0;
+ 
+ #define SWSTATS_ACCUMULATE_LINE_STATS(div) \
+ 	sumR += r;                         \
+ 	sumG += g;                         \
+ 	sumB += b;                         \
+                                            \
++	if (r >= 248 * (div) || g >= 248 * (div) || b >= 248 * (div)) \
++		clippedCount++;            \
++                                           \
+ 	yVal = r * kRedYMul;               \
+ 	yVal += g * kGreenYMul;            \
+ 	yVal += b * kBlueYMul;             \
+@@ -208,7 +212,8 @@
+ 	stats.sum_.r() += sumR;     \
+ 	stats.sum_.g() += sumG;     \
+ 	stats.sum_.b() += sumB;     \
+-	stats.sharpness += sharp;
++	stats.sharpness += sharp;   \
++	stats.clipped += clippedCount;
+ 
+ void SwStatsCpu::statsBGGR8Line0(const uint8_t *src[], SwIspStats &stats)
+ {
+@@ -409,6 +414,7 @@
+ 		s.sum_ = RGB<uint64_t>({ 0, 0, 0 });
+ 		s.yHistogram.fill(0);
+ 		s.sharpness = 0;
++		s.clipped = 0;
+ 	}
+ }
+ 
+@@ -427,9 +433,11 @@
+ 		sharedStats_->sum_ = RGB<uint64_t>({ 0, 0, 0 });
+ 		sharedStats_->yHistogram.fill(0);
+ 		sharedStats_->sharpness = 0;
++		sharedStats_->clipped = 0;
+ 		for (const auto &s : stats_) {
+ 			sharedStats_->sum_ += s.sum_;
+ 			sharedStats_->sharpness += s.sharpness;
++			sharedStats_->clipped += s.clipped;
+ 			for (unsigned int j = 0; j < SwIspStats::kYHistogramSize; j++)
+ 				sharedStats_->yHistogram[j] += s.yHistogram[j];
+ 		}
