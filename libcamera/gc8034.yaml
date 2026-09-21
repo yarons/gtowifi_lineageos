@@ -14,6 +14,8 @@ algorithms:
       # No colour correction matrix (too slow on the CPU): the raw colours are pale.
       saturation: 1.6
   - Agc:
+      # libcamera's default of 2.5 is an overexposed, pale picture once the digital gain can reach it.
+      exposureTarget: 1.8
   - Af:
       startPosition: 320
       coarseStep: 48

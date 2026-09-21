@@ -1,0 +1,62 @@
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Subject: [PATCH] ipa: simple: agc: Make the exposure target tunable
+
+The regulation aims at a mean sample value in the middle of the linear range
+of the sensor, which is a very bright picture. A sensor with little light
+never gets there, so it went unnoticed; with the digital gain the target is
+reached indoors and the picture is overexposed and pale, and the clipped
+green channel makes the grey world white balance turn green.
+
+Add the tuning key "exposureTarget" (1 to 5, default 2.5 as before).
+---
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -80,9 +80,18 @@
+ {
+ }
+ 
+-int Agc::init(IPAContext &context,
+-	      [[maybe_unused]] const ValueNode &tuningData)
++int Agc::init(IPAContext &context, const ValueNode &tuningData)
+ {
++	/*
++	 * The mean sample value to regulate to, between 1 and the number of
++	 * bins. The default, the middle of the linear range of the sensor, is
++	 * a bright picture, far above the usual 18% grey; cameras whose sensor
++	 * or digital gain can reach it look overexposed with it, which also
++	 * clips the raw data and misleads the white balance.
++	 */
++	exposureTarget_ = std::clamp(tuningData["exposureTarget"].get<float>(kExposureOptimal),
++				     1.0f, static_cast<float>(kExposureBinsCount));
++
+ 	context.ctrlMap[&controls::ExposureValue] =
+ 		ControlInfo(-kExposureValueMax, kExposureValueMax, 0.0f);
+ 
+@@ -114,7 +123,7 @@
+ 	int32_t &exposure = frameContext.sensor.exposure;
+ 	double &again = frameContext.sensor.gain;
+ 
+-	double error = kExposureOptimal - exposureMSV;
++	double error = exposureTarget_ - exposureMSV;
+ 
+ 	if (std::abs(error) <= kExposureSatisfactory)
+ 		return;
+@@ -268,7 +277,7 @@
+ 	 * value to the target, by applying it to the histogram. Only when the
+ 	 * sensor can do no more.
+ 	 */
+-	const float target = kExposureOptimal;
++	const float target = exposureTarget_;
+ 	const bool sensorAtMax =
+ 		frameContext.sensor.exposure >= context.configuration.agc.exposureMax &&
+ 		frameContext.sensor.gain >= context.configuration.agc.againMax -
+--- a/src/ipa/simple/algorithms/agc.h
++++ b/src/ipa/simple/algorithms/agc.h
+@@ -32,6 +32,7 @@
+ private:
+ 	void updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV);
+ 
++	float exposureTarget_;
+ 	float exposureValue_ = 0.0f;
+ 	float digitalGain_ = 1.0f;
+ };
