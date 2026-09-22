@@ -1,0 +1,131 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Everything that can be checked without building Android: a few minutes on a free runner.
+# What it is for: the tree pins other projects (LineageOS branches, libcamera, aospext) and carries
+# patches against them. When one of those moves, a build breaks hours later on a big machine --
+# these jobs say so in minutes.
+
+name: Validate
+
+on:
+  push:
+    branches: [ lineage-23.2 ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  files:
+    name: Manifests, configuration files, scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: XML is well formed
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          find . -name '*.xml' -not -path './.git/*' -print0 | xargs -0 -r xmllint --noout
+
+      - name: YAML parses
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          bad = 0
+          for name in glob.glob('libcamera/*.yaml'):
+              try:
+                  yaml.safe_load(open(name))
+                  print('ok  ', name)
+              except Exception as error:
+                  print('FAIL', name, error); bad = 1
+          sys.exit(bad)
+          PY
+
+      - name: Shell scripts parse
+        run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -r -n1 bash -n
+
+      - name: Python tools parse
+        run: find . -name '*.py' -not -path './.git/*' -print0 | xargs -0 -r -n1 python3 -m py_compile
+
+      - name: Every pinned project and revision exists
+        run: |
+          python3 - <<'PY'
+          import subprocess, sys, xml.etree.ElementTree as ET
+          remotes, bad = {}, 0
+          trees = [ET.parse(f'local_manifests/{name}') for name in
+                   ('gtowifi_mainline.xml', 'gtowifi_mainline_deps.xml')]
+          for tree in trees:
+              for remote in tree.getroot().iter('remote'):
+                  remotes[remote.get('name')] = remote.get('fetch').rstrip('/')
+          for tree in trees:
+              for project in tree.getroot().iter('project'):
+                  url = f"{remotes[project.get('remote')]}/{project.get('name')}"
+                  if not url.endswith('.git'):
+                      url += '.git'
+                  revision = project.get('revision')
+                  # a commit cannot be asked for by name: check that the repository answers at all
+                  query = revision if not len(revision) == 40 or not all(
+                      c in '0123456789abcdef' for c in revision) else 'HEAD'
+                  result = subprocess.run(['git', 'ls-remote', '--exit-code', url, query],
+                                          capture_output=True, text=True)
+                  state = 'ok  ' if result.returncode == 0 else 'FAIL'
+                  if result.returncode:
+                      bad = 1
+                  print(state, url, revision)
+          sys.exit(bad)
+          PY
+
+  patches:
+    name: Patches still apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned revisions from the manifest
+        id: pins
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import xml.etree.ElementTree as ET
+          root = ET.parse('local_manifests/gtowifi_mainline.xml').getroot()
+          for project in root.iter('project'):
+              if project.get('path') == 'external/libcamera-upstream':
+                  print(f"libcamera_rev={project.get('revision')}")
+          PY
+
+      # The pristine clone is cached and never patched, so the cache stays reusable
+      - name: Cache the pinned libcamera
+        uses: actions/cache@v4
+        with:
+          path: /tmp/libcamera-src
+          key: libcamera-${{ steps.pins.outputs.libcamera_rev }}
+
+      - name: libcamera patches
+        run: |
+          [ -d /tmp/libcamera-src ] || git clone --quiet --depth 1 \
+              --branch "${{ steps.pins.outputs.libcamera_rev }}" \
+              https://github.com/libcamera-org/libcamera /tmp/libcamera-src
+          cp -a /tmp/libcamera-src /tmp/libcamera
+          cd /tmp/libcamera
+          for patch in "$GITHUB_WORKSPACE"/libcamera/patches/*.patch; do
+              if patch -p1 --dry-run --silent -i "$patch"; then
+                  patch -p1 --silent -i "$patch"
+                  echo "ok   $(basename "$patch")"
+              else
+                  echo "FAIL $(basename "$patch")"; exit 1
+              fi
+          done
+
+      - name: Platform patches
+        run: |
+          set -e
+          for directory in $(find patches -mindepth 1 -type d | sed 's|^patches/||' | sort -u); do
+              ls patches/"$directory"/*.patch >/dev/null 2>&1 || continue
+              name="android_$(echo "$directory" | tr / _)"
+              git clone --quiet --depth 1 --branch lineage-23.2 \
+                  "https://github.com/LineageOS/$name" "/tmp/$name"
+              for patch in "$GITHUB_WORKSPACE"/patches/"$directory"/*.patch; do
+                  git -C "/tmp/$name" apply --check "$patch" \
+                      && echo "ok   $directory/$(basename "$patch")" \
+                      || { echo "FAIL $directory/$(basename "$patch")"; exit 1; }
+              done
+          done

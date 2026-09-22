@@ -1,0 +1,109 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# The full image set. This does NOT fit on a GitHub-hosted runner: the tree, ccache and output need
+# about 250 GB and the first build takes hours. It therefore runs on a self-hosted runner, and its
+# cache is the runner's own disk: the checked-out LineageOS tree and the ccache stay between runs,
+# which turns a device-tree change into a build of a few minutes. GitHub's own cache is capped at
+# 10 GB per repository and is useless for this (the ccache alone is 30 GB).
+#
+# Setting a runner up: a machine or a cloud instance with >= 300 GB free, 16 GB RAM and the
+# LineageOS build dependencies, registered with the label "lineage-build". Do not register a
+# machine that belongs to someone else.
+
+name: Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      resync:
+        description: 'repo sync before building (slow; needed after a manifest change)'
+        type: boolean
+        default: true
+      clean:
+        description: 'Discard the output of the last build (installclean)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: images
+  cancel-in-progress: false
+
+env:
+  # Persistent between runs: this is the cache
+  LINEAGE_HOME: ${{ vars.LINEAGE_HOME || '/mnt/lineage' }}
+  BRANCH: lineage-23.2
+  DEVICE: gtowifi_mainline
+
+jobs:
+  build:
+    name: system, vendor, vendor_dlkm, boot
+    runs-on: [ self-hosted, lineage-build ]
+    timeout-minutes: 600
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: device-tree
+
+      - name: Preflight
+        run: |
+          free=$(df --output=avail -BG "$LINEAGE_HOME" | tail -1 | tr -dc '0-9')
+          echo "free in $LINEAGE_HOME: ${free} GB, $(nproc) cores, $(free -g | awk '/Mem:/{print $2}') GB RAM"
+          [ "$free" -ge 100 ] || { echo "Not enough disk. A full build needs about 250 GB."; exit 1; }
+          command -v repo >/dev/null || { echo "repo is not installed on this runner"; exit 1; }
+
+      - name: Source tree
+        run: |
+          mkdir -p "$LINEAGE_HOME/lineage" && cd "$LINEAGE_HOME/lineage"
+          [ -d .repo ] || repo init -u https://github.com/LineageOS/android.git -b "$BRANCH" --git-lfs
+          mkdir -p .repo/local_manifests
+          cp "$GITHUB_WORKSPACE"/device-tree/local_manifests/*.xml .repo/local_manifests/
+          if [ "${{ inputs.resync }}" = true ]; then
+              repo sync -c -j"$(nproc)" --no-tags --force-sync
+          fi
+          # Always build the commit this workflow was started for, not what repo synced
+          rm -rf device/samsung/$DEVICE
+          cp -a "$GITHUB_WORKSPACE/device-tree" device/samsung/$DEVICE
+          git -C device/samsung/$DEVICE log --oneline -1 2>/dev/null || true
+
+      - name: Platform patches
+        run: cd "$LINEAGE_HOME/lineage" && device/samsung/$DEVICE/tools/apply-patches.sh
+
+      - name: Build
+        run: |
+          cd "$LINEAGE_HOME/lineage"
+          export USE_CCACHE=1 CCACHE_EXEC=/usr/bin/ccache CCACHE_DIR="$LINEAGE_HOME/ccache"
+          ccache -M 30G >/dev/null
+          set +u; source build/envsetup.sh; breakfast "$DEVICE" userdebug; set -u
+          if [ "${{ inputs.clean }}" = true ]; then mka installclean; fi
+          mka bootimage systemimage vendorimage vendor_dlkmimage
+          ccache -s | head -6
+
+      - name: Package
+        id: package
+        run: |
+          out="$LINEAGE_HOME/lineage/out/target/product/$DEVICE"
+          stage="$GITHUB_WORKSPACE/images"; mkdir -p "$stage"; cd "$stage"
+          cp "$out"/vendor.img "$out"/vendor_dlkm.img "$out"/boot.img.mkbootimg .
+          "$LINEAGE_HOME/lineage/device/samsung/$DEVICE/tools/make-fastboot-boot-img.sh" \
+              "$out" boot-fastboot-v0.img
+          xz -T0 -3 -c "$out/system.img" > system.img.xz
+          sha256sum * > SHA256SUMS
+          # so that a downloader can also check the file they unpack
+          echo "$(sha256sum "$out/system.img" | cut -d' ' -f1)  system.img (after xz -d)" >> SHA256SUMS
+          cat SHA256SUMS
+          echo "version=$(grep -m1 ro.lineage.version "$out"/system/build.prop 2>/dev/null | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Build metadata
+        run: |
+          cd "$LINEAGE_HOME/lineage"
+          repo manifest -r -o "$GITHUB_WORKSPACE/images/pinned-manifest.xml"
+          grep -c '<project' "$GITHUB_WORKSPACE/images/pinned-manifest.xml"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: images-${{ steps.package.outputs.version || github.sha }}
+          path: images/
+          retention-days: 30
+          compression-level: 0

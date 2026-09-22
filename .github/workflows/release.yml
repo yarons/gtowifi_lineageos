@@ -1,0 +1,87 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Publish a set of images that the "Images" workflow built as a GitHub release.
+#
+# The release is created by the repository itself: the job uses GITHUB_TOKEN, which belongs to this
+# repository and to nobody's personal account. No maintainer has to be logged in anywhere, and the
+# checksums of what people download are computed here, from the files that were built.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run of the "Images" workflow whose images to publish'
+        required: true
+        type: string
+      tag:
+        description: 'Tag, e.g. 23.2-20260921-prerelease'
+        required: true
+        type: string
+      notes:
+        description: 'Release notes file in the repository'
+        required: false
+        default: 'docs/release-notes.md'
+        type: string
+      prerelease:
+        description: 'Mark as a pre-release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the images of that build
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: images
+          merge-multiple: true
+
+      - name: Check the checksums the build wrote
+        run: |
+          cd images
+          ls -la
+          # the entries for unpacked files cannot be checked here
+          grep -v '(after xz -d)' SHA256SUMS > /tmp/sums
+          sha256sum -c /tmp/sums
+
+      - name: Release notes
+        run: |
+          {
+            sed -e "s/@TAG@/${{ inputs.tag }}/g" \
+                -e "s/@RUN@/${{ inputs.run_id }}/g" "${{ inputs.notes }}"
+            echo
+            echo "---"
+            echo
+            echo "Built by [run ${{ inputs.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.run_id }}) from \`${{ github.sha }}\`."
+            echo "The checksums below were computed by that build; \`SHA256SUMS\` is attached."
+            echo
+            echo '```'
+            cat images/SHA256SUMS
+            echo '```'
+          } > /tmp/notes.md
+          head -20 /tmp/notes.md
+
+      - name: Publish
+        env:
+          # the repository's own token: not a personal account
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flags=""
+          [ "${{ inputs.prerelease }}" = true ] && flags="--prerelease"
+          # shellcheck disable=SC2086
+          gh release create "${{ inputs.tag }}" images/* \
+              --title "LineageOS ${{ inputs.tag }} for the Galaxy Tab A 8.0 2019 (SM-T290)" \
+              --notes-file /tmp/notes.md \
+              --target "${{ github.sha }}" $flags

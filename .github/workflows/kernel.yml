@@ -1,0 +1,131 @@
+#
+# SPDX-FileCopyrightText: The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build the kernel and the device tree blob alone, without the Android tree: it fits on a free
+# runner and is what actually breaks when the kernel branch or the configuration fragments move.
+# The kernel of a release is built by the Android build with AOSP's clang; this job uses the
+# distribution's GCC, so it proves that the source and the configuration are sound, not that the
+# binary is the same.
+
+name: Kernel
+
+on:
+  push:
+    branches: [ lineage-23.2 ]
+    paths: [ 'kconfigs/**', 'modprobe/**', 'local_manifests/**', '.github/workflows/kernel.yml' ]
+  pull_request:
+    paths: [ 'kconfigs/**', 'modprobe/**', 'local_manifests/**', '.github/workflows/kernel.yml' ]
+  workflow_dispatch:
+    inputs:
+      kernel_revision:
+        description: 'Kernel branch or commit (default: what the manifest pins)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    name: Image.gz and the gtowifi DTB
+    # arm64: the kernel is arm64 and the runner is, so nothing is cross-compiled
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Read the pinned kernel from the manifest
+        id: pins
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, xml.etree.ElementTree as ET
+          root = ET.parse('device/local_manifests/gtowifi_mainline.xml').getroot()
+          remotes = {r.get('name'): r.get('fetch').rstrip('/') for r in root.iter('remote')}
+          for project in root.iter('project'):
+              if project.get('path') == 'kernel/mainline/msm89x7-mainline':
+                  wanted = os.environ.get('WANTED') or project.get('revision')
+                  print(f"url={remotes[project.get('remote')]}/{project.get('name')}")
+                  print(f"revision={wanted}")
+          PY
+        env:
+          WANTED: ${{ inputs.kernel_revision }}
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bc bison ccache flex libelf-dev libssl-dev lz4 make \
+              python3 gcc g++
+
+      - name: Sources
+        run: |
+          git clone --quiet --depth 1 --branch "${{ steps.pins.outputs.revision }}" \
+              "${{ steps.pins.outputs.url }}" kernel
+          git clone --quiet --depth 1 --branch lineage-23.2 \
+              https://github.com/LineageOS/android_kernel_mainline_configs stack-configs
+          # AOSP's base requirements for this kernel generation
+          mkdir -p aosp-configs
+          curl -fsSL 'https://android.googlesource.com/kernel/configs/+archive/refs/heads/android-6.12.tar.gz' \
+              | tar xz -C aosp-configs
+
+      # ccache of a kernel build is about a gigabyte, so it fits the 10 GB cache of a repository.
+      # The key follows the kernel revision; an older build of the same branch is still a good start.
+      - name: ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: kernel-ccache-${{ steps.pins.outputs.revision }}-${{ hashFiles('device/kconfigs/*') }}
+          restore-keys: |
+            kernel-ccache-${{ steps.pins.outputs.revision }}-
+            kernel-ccache-
+
+      - name: Configure
+        run: |
+          export CCACHE_DIR=~/.ccache
+          ccache -M 2G >/dev/null
+          out=$PWD/out; mkdir -p "$out"
+          make -s -C kernel ARCH=arm64 O="$out" msm8916_defconfig >/dev/null
+          cp device/kconfigs/config-postmarketos-qcom-msm89x7.aarch64 "$out/.config"
+          fragments=stack-configs/fragments
+          ( cd "$out" && ARCH=arm64 "$GITHUB_WORKSPACE/kernel/scripts/kconfig/merge_config.sh" \
+              -O "$out" "$out/.config" \
+              "$GITHUB_WORKSPACE/$fragments/android-base-pre/common.config" \
+              "$GITHUB_WORKSPACE/$fragments/android-base-pre/arm64.config" \
+              "$GITHUB_WORKSPACE/aosp-configs/android-base.config" \
+              "$GITHUB_WORKSPACE/$fragments/android-base-conditional/CONFIG_ARM64-y.config" \
+              "$GITHUB_WORKSPACE/$fragments/common.config" \
+              "$GITHUB_WORKSPACE/$fragments/y/fbcon.config" \
+              "$GITHUB_WORKSPACE/$fragments/n/disable-clang-hardening-features.config" \
+              "$GITHUB_WORKSPACE/$fragments/n/faster-build-time.config" \
+              "$GITHUB_WORKSPACE/device/kconfigs/fixups.config" ) > merge.log 2>&1 || \
+              { tail -30 merge.log; exit 1; }
+          echo "== options this device tree asks for"
+          grep -E '^(# )?CONFIG_(MEMFD_ASHMEM_SHIM|ANDROID_USB_CONFIGFS_UEVENT|DRM_MSM|VIDEO_GC8034|VIDEO_GC2375H|BACKLIGHT_PWM|SUSPEND)\b' "$out/.config" || true
+
+      - name: Build
+        run: |
+          export CCACHE_DIR=~/.ccache PATH="/usr/lib/ccache:$PATH"
+          make -s -C kernel ARCH=arm64 O="$PWD/out" -j"$(nproc)" \
+              Image.gz modules qcom/sdm429-samsung-gtowifi.dtb
+          ls -la out/arch/arm64/boot/Image.gz \
+                 out/arch/arm64/boot/dts/qcom/sdm429-samsung-gtowifi.dtb
+
+      - name: Every module this device tree loads was built
+        run: |
+          missing=0
+          for module in $(grep -hv '^#' device/modprobe/modules.load.* | grep -v '^$' | sort -u); do
+              find out -name "${module}.ko" -print -quit | grep -q . \
+                  || { echo "MISSING $module"; missing=1; }
+          done
+          if [ "$missing" = 0 ]; then echo "all modules present"; fi
+          exit $missing
+
+      - name: ccache statistics
+        run: CCACHE_DIR=~/.ccache ccache -s | head -8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ steps.pins.outputs.revision }}
+          path: |
+            out/arch/arm64/boot/Image.gz
+            out/arch/arm64/boot/dts/qcom/sdm429-samsung-gtowifi.dtb
+            out/.config
+          retention-days: 30
