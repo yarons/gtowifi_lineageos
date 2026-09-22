@@ -130,6 +130,8 @@ Install, from lk2nd's fastboot (the partition table stays Samsung's):
 
 `vendor_dlkm.img` holds the kernel modules and has to come from the same build as the boot image.
 
+How the tree is kept up to date with newer kernels and LineageOS branches: `docs/updating.md`.
+
 ## Credits
 
 LineageOS mainline stack and the Xiaomi msm89xx targets this is derived from: 0xCAFEBABE and the
