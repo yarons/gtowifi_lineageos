@@ -51,6 +51,20 @@ kernel 7.1.3).
 6. Bump the `revision` of the kernel project in `local_manifests/gtowifi_mainline.xml` and say in the
    commit message which tag it is based on.
 
+### Power-management release gate
+
+The published r12 release deliberately keeps `TARGET_SUPPORTS_SUSPEND := false`. Do not change it just
+because the new kernel config exposes `s2idle`: Android will otherwise remove the permanent wake lock
+and begin suspending a tablet that has not completed its resume validation.
+
+For the first kernel release that carries the cpuidle and DRM suspend fixes, first test the candidate
+kernel by RAM boot with the matching `vendor_dlkm.img`. Confirm repeated RTC wake-ups and that display,
+touch, Wi-Fi, USB gadget, and ADSP audio all work after resume. Then make a separate Android test build
+with `TARGET_SUPPORTS_SUSPEND := true`; verify alarm and power-key wake, the same post-resume checks,
+and an unplugged overnight screen-off drain measurement. Only a build that passes those tests may enable
+suspend in a published release. Update the README and release notes with the exact kernel revision and
+measured limitations at that time.
+
 ## Moving to a newer LineageOS branch
 
 1. `repo init -b lineage-XX`, and set the same branch for every project in
