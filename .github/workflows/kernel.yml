@@ -61,10 +61,13 @@ jobs:
               "${{ steps.pins.outputs.url }}" kernel
           git clone --quiet --depth 1 --branch lineage-23.2 \
               https://github.com/LineageOS/android_kernel_mainline_configs stack-configs
-          # AOSP's base requirements for this kernel generation
+          # AOSP's base requirements for this kernel generation. googlesource serves a single
+          # file base64 encoded; the layout is <release letter>/<version>/android-base.config
           mkdir -p aosp-configs
-          curl -fsSL 'https://android.googlesource.com/kernel/configs/+archive/refs/heads/android-6.12.tar.gz' \
-              | tar xz -C aosp-configs
+          curl -fsSL 'https://android.googlesource.com/kernel/configs/+/refs/heads/main/b/android-6.12/android-base.config?format=TEXT' \
+              | base64 -d > aosp-configs/android-base.config
+          grep -q CONFIG_ aosp-configs/android-base.config
+          wc -l aosp-configs/android-base.config
 
       # ccache of a kernel build is about a gigabyte, so it fits the 10 GB cache of a repository.
       # The key follows the kernel revision; an older build of the same branch is still a good start.

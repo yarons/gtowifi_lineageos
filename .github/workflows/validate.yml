@@ -51,7 +51,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import subprocess, sys, xml.etree.ElementTree as ET
-          remotes, bad = {}, 0
+          # "github" is defined by LineageOS's own manifest, not by the local ones
+          remotes, bad = {'github': 'https://github.com'}, 0
           trees = [ET.parse(f'local_manifests/{name}') for name in
                    ('gtowifi_mainline.xml', 'gtowifi_mainline_deps.xml')]
           for tree in trees:
@@ -59,19 +60,22 @@ jobs:
                   remotes[remote.get('name')] = remote.get('fetch').rstrip('/')
           for tree in trees:
               for project in tree.getroot().iter('project'):
-                  url = f"{remotes[project.get('remote')]}/{project.get('name')}"
+                  fetch = remotes.get(project.get('remote'))
+                  if fetch is None:
+                      print('SKIP', project.get('name'), '(remote not defined here)')
+                      continue
+                  url = f"{fetch}/{project.get('name')}"
                   if not url.endswith('.git'):
                       url += '.git'
                   revision = project.get('revision')
                   # a commit cannot be asked for by name: check that the repository answers at all
-                  query = revision if not len(revision) == 40 or not all(
-                      c in '0123456789abcdef' for c in revision) else 'HEAD'
-                  result = subprocess.run(['git', 'ls-remote', '--exit-code', url, query],
-                                          capture_output=True, text=True)
-                  state = 'ok  ' if result.returncode == 0 else 'FAIL'
+                  is_sha = len(revision) == 40 and all(c in '0123456789abcdef' for c in revision)
+                  result = subprocess.run(
+                      ['git', 'ls-remote', '--exit-code', url, 'HEAD' if is_sha else revision],
+                      capture_output=True, text=True)
                   if result.returncode:
                       bad = 1
-                  print(state, url, revision)
+                  print('ok  ' if not result.returncode else 'FAIL', url, revision)
           sys.exit(bad)
           PY
 
@@ -89,7 +93,11 @@ jobs:
           root = ET.parse('local_manifests/gtowifi_mainline.xml').getroot()
           for project in root.iter('project'):
               if project.get('path') == 'external/libcamera-upstream':
-                  print(f"libcamera_rev={project.get('revision')}")
+                  revision = project.get('revision')
+                  for prefix in ('refs/tags/', 'refs/heads/'):
+                      if revision.startswith(prefix):
+                          revision = revision[len(prefix):]
+                  print(f"libcamera_rev={revision}")
           PY
 
       # The pristine clone is cached and never patched, so the cache stays reusable
