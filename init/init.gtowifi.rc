@@ -41,7 +41,10 @@ on post-fs
 on boot
     start vendor.gtowifi-modem
 
-service vendor.gtowifi-modem /vendor/bin/sh /vendor/bin/init.gtowifi.modem.sh
+on property:vendor.gtowifi.modem.state=bound
+    start vendor.rmtfs
+
+service vendor.gtowifi-modem /vendor/bin/init.gtowifi.modem.sh
     user root
     group root system
     oneshot
