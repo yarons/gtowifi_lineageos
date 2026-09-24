@@ -13,6 +13,9 @@ rfkill
 wcn36xx
 wcnss_ctrl
 
+# exFAT, the file system of every SDXC card (64 GB and up). vold only mounts exFAT when the kernel lists
+# it in /proc/filesystems, and nothing else loads the module: without it such cards are "unmountable"
+exfat
 # ADSP (audio and sensors); firmware adsp.* comes from apnhlos
 qcom_q6v5
 qcom_q6v5_pas
