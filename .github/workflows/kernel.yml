@@ -45,6 +45,8 @@ jobs:
                   wanted = os.environ.get('WANTED') or project.get('revision')
                   print(f"url={remotes[project.get('remote')]}/{project.get('name')}")
                   print(f"revision={wanted}")
+                  # artifact names may not contain a slash
+                  print(f"artifact=kernel-{wanted.replace('/', '-')}")
           PY
         env:
           WANTED: ${{ inputs.kernel_revision }}
@@ -136,7 +138,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ steps.pins.outputs.revision }}
+          name: ${{ steps.pins.outputs.artifact }}
           path: |
             out/arch/arm64/boot/Image.gz
             out/arch/arm64/boot/dts/qcom/sdm429-samsung-gtowifi.dtb
