@@ -48,6 +48,8 @@ kernel 7.1.3).
    to the launcher, display and touch, Wi-Fi, sound (play something), sensors (rotate), both cameras,
    battery gauge, adb. Only then flash `product`, write the boot image behind lk2nd, and let the tablet
    restart on its own (the release notes explain why the boot image and `product` must match).
+   Kernel changes can be tried before any Android build: `tools/kernel-test-set/` builds the kernel
+   alone (no x86 host needed) and puts it and its modules into the images of the installed release.
 6. Bump the `revision` of the kernel project in `local_manifests/gtowifi_mainline.xml` and say in the
    commit message which tag it is based on.
 
