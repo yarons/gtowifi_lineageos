@@ -18,7 +18,11 @@ TARGET_QCOM_SOC := sdm429
 # Battery: PMI632 SMB5 charger + simple-battery (kernel gtowifi/integration) show up as
 # /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
 TARGET_HEALTH_HAL := default-aidl
-TARGET_SUPPORTS_SUSPEND := false
+# Suspend (s2idle): TEST. Needs kernel r14 or later (CPU idle states; the mdp5 fix without which the
+# second suspend fails in mdp5_pipe_release). A released build keeps it off until the gate in
+# docs/updating.md is passed: repeated wake-ups by alarm and power key with display, touch, Wi-Fi, USB
+# and audio working afterwards, and an unplugged overnight measurement.
+TARGET_SUPPORTS_SUSPEND := true
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
 # Backlight: pwm-backlight on the PM8953 PWM, /sys/class/backlight/backlight, which the stack's lights
