@@ -1,0 +1,51 @@
+# sysfs of this board. mainline/qcom-common labels these only for newer SoCs; the paths are the ones
+# the services were seen reading on the tablet (2026-09-24). genfscon matches path prefixes.
+
+# Display and GPU: Mesa and gralloc read the devices' uevent in every graphics process
+genfscon sysfs /devices/platform/soc@0/1a00000.display-subsystem	u:object_r:sysfs_gpu:s0
+genfscon sysfs /devices/platform/soc@0/1c00000.gpu			u:object_r:sysfs_gpu:s0
+
+# Backlight (light HAL)
+genfscon sysfs /devices/platform/backlight/backlight			u:object_r:vendor_sysfs_backlight:s0
+genfscon sysfs /class/backlight						u:object_r:vendor_sysfs_backlight:s0
+
+# Battery and charger, PMI632 (health HAL)
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply	u:object_r:sysfs_batteryinfo:s0
+
+# RTC, PM8953 (timekeep, system_server)
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:rtc@6000/rtc/rtc0		u:object_r:sysfs_rtc:s0
+
+# Wake-up sources (system_suspend)
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:rtc@6000/wakeup		u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/wakeup	u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply/pmi632-battery/wakeup	u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/c200000.remoteproc/wakeup	u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/a204000.remoteproc/wakeup	u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/4080000.remoteproc/wakeup	u:object_r:sysfs_wakeup:s0
+
+# Remote processors: ADSP (c200000), WCNSS (a204000), modem (4080000, kernel r13 and later)
+genfscon sysfs /class/remoteproc					u:object_r:vendor_sysfs_remoteproc:s0
+genfscon sysfs /devices/platform/soc@0/c200000.remoteproc/remoteproc/remoteproc	u:object_r:vendor_sysfs_remoteproc:s0
+genfscon sysfs /devices/platform/soc@0/a204000.remoteproc/remoteproc/remoteproc	u:object_r:vendor_sysfs_remoteproc:s0
+genfscon sysfs /devices/platform/soc@0/4080000.remoteproc/remoteproc/remoteproc	u:object_r:vendor_sysfs_remoteproc:s0
+
+# Sensors: IIO devices of the ADSP's sensor manager (sensors HAL). The ADSP is remoteproc0 with kernel r12
+# and remoteproc1 from r13 on (the modem comes first), hence both.
+genfscon sysfs /devices/platform/soc@0/c200000.remoteproc/remoteproc/remoteproc0/remoteproc0:smd-edge/remoteproc0:smd-edge.IPCRTR.-1.-1	u:object_r:vendor_sysfs_iio:s0
+genfscon sysfs /devices/platform/soc@0/c200000.remoteproc/remoteproc/remoteproc1/remoteproc1:smd-edge/remoteproc1:smd-edge.IPCRTR.-1.-1	u:object_r:vendor_sysfs_iio:s0
+# The PMICs' ADCs are IIO devices too; the sensors HAL looks at every IIO device
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:adc@3100/iio:device	u:object_r:vendor_sysfs_iio:s0
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:adc@3100/iio:device	u:object_r:vendor_sysfs_iio:s0
+
+# USB gadget (USB gadget HAL) and the cable state (system_server)
+genfscon sysfs /devices/platform/soc@0/78db000.usb/ci_hdrc.0/udc	u:object_r:sysfs_udc:s0
+genfscon sysfs /devices/platform/extcon-usb-dummy/extcon		u:object_r:sysfs_extcon:s0
+
+# Block devices: eMMC (init tunes discard, vold) and the SD card (vold)
+genfscon sysfs /devices/platform/soc@0/7824900.mmc/mmc_host/mmc0	u:object_r:sysfs_devices_block:s0
+genfscon sysfs /devices/platform/soc@0/7864900.mmc/mmc_host/mmc1	u:object_r:sysfs_devices_block:s0
+
+# Cameras: media topology, CAMSS and the sensors on the CCI bus (camera HAL, libcamera)
+genfscon sysfs /bus/media						u:object_r:vendor_sysfs_video4linux:s0
+genfscon sysfs /devices/platform/soc@0/1b34000.camss			u:object_r:vendor_sysfs_video4linux:s0
+genfscon sysfs /devices/platform/soc@0/1b0c000.cci			u:object_r:vendor_sysfs_video4linux:s0

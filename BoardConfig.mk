@@ -49,10 +49,10 @@ BOARD_KERNEL_CMDLINE := \
 # it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
 # (fastboot oem ramoops console, fastboot get_staged).
 
-# TODO: write sepolicy for the mainline services, then drop this
+# Still permissive: sepolicy/vendor covers what one boot and a round of the apps logged, it has not
+# run enforcing yet. The kernel's audit messages stay on so that the rest shows up in dmesg.
 BOARD_KERNEL_CMDLINE += \
-    androidboot.selinux=permissive \
-    audit=0
+    androidboot.selinux=permissive
 
 # Display
 # 800x1280 on 8 inches; same density as the official LineageOS tree
@@ -129,6 +129,10 @@ BOARD_RAMDISK_USE_LZ4 := true
 TARGET_RECOVERY_DENSITY := hdpi
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/fstab/fstab.gtowifi
 TARGET_RECOVERY_PIXEL_FORMAT := BGRX_8888
+
+# SELinux
+BOARD_VENDOR_SEPOLICY_DIRS += \
+    $(DEVICE_PATH)/sepolicy/vendor
 
 # VINTF
 DEVICE_MANIFEST_FILE := \

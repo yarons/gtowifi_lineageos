@@ -1,0 +1,22 @@
+# GNSS HAL: QMI location service of the modem, over QRTR (gnss/)
+/(vendor|system/vendor)/bin/hw/android\.hardware\.gnss-service\.qmiloc	u:object_r:hal_gnss_default_exec:s0
+# Waits for the modem's remoteproc driver, then has init start rmtfs (init/)
+/(vendor|system/vendor)/bin/init\.gtowifi\.modem\.sh		u:object_r:vendor_gtowifi_modem_exec:s0
+
+# Cameras on CAMSS: the media controller and the V4L2 sub-devices, next to the video nodes
+/dev/media[0-9]+		u:object_r:video_device:s0
+/dev/v4l-subdev[0-9]+		u:object_r:video_device:s0
+
+# Partitions: Samsung's names on the eMMC (logdump is used as /metadata, product as vendor_dlkm)
+/dev/block/platform/soc@0/7824900\.mmc/by-name/boot		u:object_r:boot_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/recovery		u:object_r:recovery_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/misc		u:object_r:misc_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/logdump		u:object_r:metadata_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/userdata		u:object_r:userdata_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/cache		u:object_r:cache_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/system		u:object_r:system_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/vendor		u:object_r:system_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/product		u:object_r:system_block_device:s0
+# The modem's file system (EFS) for rmtfs; the stack's rmtfs may only read them
+/dev/block/platform/soc@0/7824900\.mmc/by-name/modemst[12]	u:object_r:modem_block_device:s0
+/dev/block/platform/soc@0/7824900\.mmc/by-name/fs[cg]		u:object_r:modem_block_device:s0

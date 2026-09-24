@@ -1,0 +1,14 @@
+# The kernel of this device
+
+# Firmware on persist (WCNSS_qcom_wlan_nv.bin, sensors/sns.reg; the stack links them into /vendor/firmware).
+# The kernel may not look into /mnt/vendor (neverallow): its direct load fails and ueventd, the fallback,
+# reads the file. persist is mounted with the firmware_mnt_file context (fstab), which ueventd may read;
+# Samsung's labels on the files mean nothing to this policy.
+allow ueventd mnt_vendor_file:dir search;
+dontaudit kernel mnt_vendor_file:dir search;
+
+# devtmpfs (the pmOS kernel configuration has it): the kernel keeps its own device nodes there, which
+# Android does not use (its /dev is ueventd's tmpfs). Block nodes may not be created (neverallow), and
+# failures there are harmless.
+dontaudit kernel device:dir { add_name create remove_name write };
+dontaudit kernel device:{ chr_file blk_file } { create setattr unlink };

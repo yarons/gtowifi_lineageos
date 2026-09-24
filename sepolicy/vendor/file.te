@@ -1,0 +1,5 @@
+# Camera topology in sysfs: /sys/bus/media, CAMSS and the sensors on the CCI bus (genfs_contexts)
+type vendor_sysfs_video4linux, fs_type, sysfs_type;
+
+# libcamera's memfds (tmpfs_domain in hal_camera_default.te)
+type hal_camera_default_tmpfs, file_type;

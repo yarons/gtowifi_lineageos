@@ -1,0 +1,24 @@
+# Gaps of the LineageOS mainline stack's policy that show on this device. To be upstreamed; here until
+# then. Each rule names the denial it answers.
+
+# vendor_start_remoteproc: the stack starts its script as "/vendor/bin/sh script" in this domain, and the
+# script lists /sys/class/remoteproc, reads names and writes states (seen: vendor_shell_exec entrypoint,
+# vendor_toolbox_exec execute_no_trans, sysfs read/write)
+allow vendor_start_remoteproc vendor_shell_exec:file { entrypoint read };
+allow vendor_start_remoteproc vendor_toolbox_exec:file rx_file_perms;
+allow vendor_start_remoteproc vendor_sysfs_remoteproc:dir r_dir_perms;
+allow vendor_start_remoteproc vendor_sysfs_remoteproc:{ file lnk_file } rw_file_perms;
+dontaudit vendor_start_remoteproc kernel:system syslog_read;
+dontaudit vendor_start_remoteproc self:capability2 syslog;
+
+# vendor_init sets the stack's minigbm properties. Not sys.use_memfd: a platform property, which vendor
+# code may not set (neverallow), so the stack's use_memfd.rc cannot work enforcing; device.mk sets it
+# as a system_ext property instead.
+set_prop(vendor_init, vendor_minigbm_prop)
+
+# vendor_msm_drm_quirks logs to the kernel log
+allow vendor_msm_drm_quirks kmsg_device:chr_file w_file_perms;
+
+# Module loading without signatures: modprobe and the kernel still look at the keyring
+dontaudit vendor_modprobe self:key { search write };
+dontaudit kernel vendor_modprobe:key search;

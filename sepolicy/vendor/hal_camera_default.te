@@ -1,0 +1,17 @@
+# libcamera's Android HAL (simple pipeline handler, software ISP) under the legacy camera provider.
+# The media and V4L2 nodes are video_device (file_contexts), which hal_camera may use already.
+
+# Media topology and the V4L2 devices' uevent
+r_dir_file(hal_camera_default, vendor_sysfs_video4linux)
+
+# Graphics buffers of the requests: allocator and mapper lookups
+hal_client_domain(hal_camera_default, hal_graphics_allocator)
+allow hal_camera_default hal_graphics_mapper_service:service_manager find;
+
+# libcamera's buffers: memfds and udmabuf. Without tmpfs_domain its memfds were plain tmpfs. The
+# software ISP asks every buffer for a DMA-buf cache sync (DMA_BUF_IOCTL_SYNC, 'b' 0x00), memfds too,
+# where the kernel answers ENOTTY and libcamera carries on; tmpfs_domain only allows ashmem's ioctls,
+# and EACCES instead would change what was tested.
+tmpfs_domain(hal_camera_default)
+allowxperm hal_camera_default hal_camera_default_tmpfs:file ioctl 0x6200;
+allow hal_camera_default udmabuf_device:chr_file rw_file_perms;

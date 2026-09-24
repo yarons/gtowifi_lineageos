@@ -1,0 +1,7 @@
+# Harmless, and noisy
+
+# Apps in isolated processes look for the content capture service
+dontaudit isolated_app content_capture_service:service_manager find;
+# storaged and fsck of SD cards read block statistics they do not need
+dontaudit storaged sysfs_devices_block:file r_file_perms;
+dontaudit fsck_untrusted sysfs_devices_block:{ dir file } r_file_perms;

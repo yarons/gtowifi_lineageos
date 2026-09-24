@@ -1,0 +1,2 @@
+persist.vendor.gtowifi.		u:object_r:vendor_gtowifi_prop:s0
+vendor.gtowifi.			u:object_r:vendor_gtowifi_prop:s0

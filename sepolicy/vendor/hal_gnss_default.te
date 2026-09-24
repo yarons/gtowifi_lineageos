@@ -1,0 +1,3 @@
+# gnss/: the AIDL GNSS HAL talks to the modem's location service (QMI LOC) over QRTR: a lookup through
+# the name service, then requests and indications on one socket
+allow hal_gnss_default self:qipcrtr_socket { create bind getattr read write setopt };
