@@ -116,8 +116,10 @@ PRODUCT_PACKAGES += \
     init.recovery.gtowifi.rc \
     ueventd.gtowifi.rc
 
-PRODUCT_PACKAGES += \
-    use_memfd.rc
+# Shared memory through memfd: there is no ashmem driver. mainline's use_memfd.rc sets it from vendor_init,
+# which SELinux does not allow for a platform property.
+PRODUCT_SYSTEM_EXT_PROPERTIES += \
+    sys.use_memfd=true
 
 # Kernel
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
