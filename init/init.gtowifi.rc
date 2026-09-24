@@ -41,6 +41,13 @@ on post-fs
 on boot
     start vendor.gtowifi-modem
 
+# Switched at run time; rmtfs stops the modem when it exits (it was started with -s)
+on property:sys.boot_completed=1 && property:persist.vendor.gtowifi.gnss=1
+    start vendor.gtowifi-modem
+
+on property:persist.vendor.gtowifi.gnss=0
+    stop vendor.rmtfs
+
 on property:vendor.gtowifi.modem.state=bound
     start vendor.rmtfs
 
