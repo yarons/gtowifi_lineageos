@@ -23,7 +23,7 @@
 /dev/block/by-name/metadata /metadata ext4 nodev,noatime,nosuid,discard,data=journal,commit=1 check,formattable,first_stage_mount,metadata_csum
 
 # Persist (eMMC, read-only)
-/dev/block/platform/soc@0/7824900.mmc/by-name/persist /mnt/vendor/persist ext4 nosuid,nodev,noatime,ro defaults
+/dev/block/platform/soc@0/7824900.mmc/by-name/persist /mnt/vendor/persist ext4 nosuid,nodev,noatime,ro,context=u:object_r:firmware_mnt_file:s0 defaults
 
 # System
 /dev/block/by-name/system /system erofs noatime,ro first_stage_mount
