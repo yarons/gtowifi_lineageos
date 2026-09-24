@@ -27,8 +27,8 @@ tablet's own partitions, GPU microcode comes from linux-firmware.
 
 Boot from the eMMC in under a minute, display with the real DRM driver, GPU (freedreno, OpenGL ES 3.1),
 backlight control, touch, keys, Wi-Fi on 2.4 and 5 GHz (WPA2), speakers, built-in microphone,
-accelerometer/auto-rotate and proximity, battery gauge and charging, USB (adb, MTP), Bluetooth pairing
-(encrypted link to a computer; audio devices not tried), both cameras through
+accelerometer/auto-rotate and proximity, battery gauge and charging, USB (adb, MTP), Bluetooth (pairing,
+music to a Bluetooth headset), wired headphones, both cameras through
 libcamera's software ISP (preview, photos, 720p video with AAC sound at about 14 fps, autofocus and tap to focus on the
 rear camera, exposure compensation), boots by itself once the boot image sits behind lk2nd. This exact
 set of images runs on the author's tablet.
@@ -37,7 +37,8 @@ set of images runs on the author's tablet.
 
 Suspend and CPU idle (see above), SELinux enforcing, GPS (the HAL is in the build, the kernel part is
 not in this release), USB host/OTG (works with a newer kernel branch, not in this release), Bluetooth
-audio devices and the headphone jack under Android (untested; the jack works at kernel level),
+calls and Bluetooth microphones (the kernel does not route the chip's voice line yet), a wired headset
+microphone (untested),
 rear photos above 2 MP (the 8 MP sensor mode gives 5 fps through the CPU ISP and is switched off), no
 colour correction matrix, lens shading correction or noise reduction in the cameras, microSD under
 Android (untested; works at kernel level), hardware video codecs (none: software codecs only).
