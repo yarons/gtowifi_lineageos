@@ -113,13 +113,23 @@ jobs:
 
       - name: Every module this device tree loads was built
         run: |
-          missing=0
-          for module in $(grep -hv '^#' device/modprobe/modules.load.* | grep -v '^$' | sort -u); do
-              find out -name "${module}.ko" -print -quit | grep -q . \
-                  || { echo "MISSING $module"; missing=1; }
-          done
-          if [ "$missing" = 0 ]; then echo "all modules present"; fi
-          exit $missing
+          python3 - <<'PY'
+          import glob, os, sys
+          # the kernel treats - and _ in module names as the same; some lists name the file (.ko)
+          norm = lambda n: os.path.basename(n).removesuffix('.ko').replace('-', '_')
+          built = {norm(p) for p in glob.glob('out/**/*.ko', recursive=True)}
+          builtin = set()
+          if os.path.exists('out/modules.builtin'):
+              builtin = {norm(l.strip()) for l in open('out/modules.builtin') if l.strip()}
+          wanted = sorted({l.strip() for f in glob.glob('device/modprobe/modules.load.*')
+                           for l in open(f) if l.strip() and not l.startswith('#')})
+          missing = [m for m in wanted if norm(m) not in built | builtin]
+          for m in missing:
+              print('MISSING', m)
+          print(f'{len(wanted) - len(missing)} of {len(wanted)} modules found '
+                f'({len(built)} built as modules, {len(builtin)} built in)')
+          sys.exit(1 if missing else 0)
+          PY
 
       - name: ccache statistics
         run: CCACHE_DIR=~/.ccache ccache -s | head -8
