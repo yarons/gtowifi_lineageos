@@ -9,6 +9,14 @@
 DEVICE=/sys/bus/platform/devices/4080000.remoteproc
 BOUND=/sys/bus/platform/drivers/qcom-q6v5-mss/4080000.remoteproc
 
+# The modem DSP runs for as long as it is started, whether anybody wants a position or not; it is off
+# unless persist.vendor.gtowifi.gnss is 1 (setprop persist.vendor.gtowifi.gnss 1 switches it on, now
+# and at every boot; 0 stops it again)
+if [ "$(getprop persist.vendor.gtowifi.gnss)" != 1 ]; then
+    echo "init.gtowifi.modem.sh: GNSS is off (persist.vendor.gtowifi.gnss != 1)" > /dev/kmsg
+    exit 0
+fi
+
 if [ ! -e "$DEVICE" ]; then
     echo "init.gtowifi.modem.sh: no modem in this kernel's device tree, GNSS stays off" > /dev/kmsg
     exit 0
