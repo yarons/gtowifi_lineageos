@@ -1,5 +1,9 @@
 # GNSS HAL: QMI location service of the modem, over QRTR (gnss/)
 /(vendor|system/vendor)/bin/hw/android\.hardware\.gnss-service\.qmiloc	u:object_r:hal_gnss_default_exec:s0
+
+# Health HAL with the empty-battery rule (health/)
+/(vendor|system/vendor)/bin/hw/android\.hardware\.health-service\.gtowifi	u:object_r:hal_health_default_exec:s0
+
 # Waits for the modem's remoteproc driver, then has init start rmtfs (init/)
 /(vendor|system/vendor)/bin/init\.gtowifi\.modem\.sh		u:object_r:vendor_gtowifi_modem_exec:s0
 

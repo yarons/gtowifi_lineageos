@@ -1,0 +1,21 @@
+//
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+// AOSP's default health HAL with one addition: a battery that stays below its declared minimum
+// voltage while discharging reads 0 %, so that Android shuts down before the pack cuts the power.
+cc_binary {
+    name: "android.hardware.health-service.gtowifi",
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.health-service.gtowifi.rc"],
+    vintf_fragments: ["android.hardware.health-service.gtowifi.xml"],
+    srcs: ["service.cpp"],
+    defaults: ["libhealth_aidl_impl_user"],
+    static_libs: ["libhealth_aidl_impl"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}

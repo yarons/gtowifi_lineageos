@@ -16,8 +16,9 @@ TARGET_QCOM_SOC := sdm429
 # Audio: tinyhal (the default of mainline/qcom-common) on the ADSP + PM8953 codec + 2x aw87319 sound
 # card; mixer paths in audio/audio.gtowifi_mainline.xml
 # Battery: PMI632 SMB5 charger + simple-battery (kernel gtowifi/integration) show up as
-# /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
-TARGET_HEALTH_HAL := default-aidl
+# /sys/class/power_supply/pmi632-battery and pmi632-charger; the kernel counts the charge. Our own
+# health HAL (health/) instead of mainline/common's default-aidl one: see "Health" below
+TARGET_HEALTH_HAL := gtowifi
 TARGET_SUPPORTS_SUSPEND := false
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
@@ -98,6 +99,11 @@ PRODUCT_VENDOR_PROPERTIES += \
 
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
+
+# Health: AOSP's default HAL, plus a battery that stays below its declared minimum voltage while
+# discharging reads 0 %, so that Android shuts down before the pack cuts the power (health/)
+PRODUCT_PACKAGES += \
+    android.hardware.health-service.gtowifi
 
 # HIDL
 PRODUCT_PACKAGES += \
