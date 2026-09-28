@@ -1,0 +1,4 @@
+gtowifi-mainline-payload.tar.gz
+kernel.env
+*.env
+!host.env.example
