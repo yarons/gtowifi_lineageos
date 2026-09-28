@@ -3,3 +3,6 @@ type vendor_sysfs_video4linux, fs_type, sysfs_type;
 
 # libcamera's memfds (tmpfs_domain in hal_camera_default.te)
 type hal_camera_default_tmpfs, file_type;
+
+# /dev/udmabuf for libcamera (file_contexts): the platform's udmabuf_device is private
+type vendor_udmabuf_device, dev_type;

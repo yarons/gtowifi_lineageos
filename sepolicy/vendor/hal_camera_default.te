@@ -14,4 +14,4 @@ allow hal_camera_default hal_graphics_mapper_service:service_manager find;
 # and EACCES instead would change what was tested.
 tmpfs_domain(hal_camera_default)
 allowxperm hal_camera_default hal_camera_default_tmpfs:file ioctl 0x6200;
-allow hal_camera_default udmabuf_device:chr_file rw_file_perms;
+allow hal_camera_default vendor_udmabuf_device:chr_file rw_file_perms;

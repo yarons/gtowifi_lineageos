@@ -2,6 +2,6 @@
 
 # Apps in isolated processes look for the content capture service
 dontaudit isolated_app content_capture_service:service_manager find;
-# storaged and fsck of SD cards read block statistics they do not need
-dontaudit storaged sysfs_devices_block:file r_file_perms;
+# fsck of SD cards reads block statistics it does not need (storaged does too, but its type is private
+# to the system policy)
 dontaudit fsck_untrusted sysfs_devices_block:{ dir file } r_file_perms;

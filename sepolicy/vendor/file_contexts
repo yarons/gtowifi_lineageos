@@ -10,6 +10,9 @@
 # Cameras on CAMSS: the media controller and the V4L2 sub-devices, next to the video nodes
 /dev/media[0-9]+		u:object_r:video_device:s0
 /dev/v4l-subdev[0-9]+		u:object_r:video_device:s0
+# libcamera's buffers. The platform's udmabuf_device is private to the system policy (not in public/),
+# so the vendor policy cannot grant it; this later entry relabels the node for the camera HAL
+/dev/udmabuf			u:object_r:vendor_udmabuf_device:s0
 
 # Partitions: Samsung's names on the eMMC (logdump is used as /metadata, product as vendor_dlkm)
 /dev/block/platform/soc@0/7824900\.mmc/by-name/boot		u:object_r:boot_block_device:s0
