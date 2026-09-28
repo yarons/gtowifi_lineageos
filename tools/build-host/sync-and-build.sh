@@ -54,7 +54,12 @@ step_sources() {
 	# LineageOS organisation, and device.mk includes the stack before roomservice would run anyway
 	mkdir -p .repo/local_manifests
 	cp device/samsung/gtowifi_mainline/local_manifests/gtowifi_mainline_deps.xml .repo/local_manifests/
-	deps=$(sed -n 's/.*<project path="\([^"]*\)".*/\1/p' .repo/local_manifests/gtowifi_mainline_deps.xml)
+	# the camera stack (external/libcamera-upstream, vendor/aospext): gtowifi_mainline.xml without the device
+	# tree and the kernel, which this step puts in place itself
+	grep -v -e 'path="device/samsung/gtowifi_mainline"' -e 'path="kernel/mainline/msm89x7-mainline"' \
+		device/samsung/gtowifi_mainline/local_manifests/gtowifi_mainline.xml > .repo/local_manifests/gtowifi_mainline.xml
+	deps=$(sed -n 's/.*<project path="\([^"]*\)".*/\1/p' .repo/local_manifests/gtowifi_mainline_deps.xml \
+		.repo/local_manifests/gtowifi_mainline.xml)
 	# shellcheck disable=SC2086
 	repo sync -c -j"${JOBS:-4}" --no-tags --force-sync $deps
 	set +u; source build/envsetup.sh; breakfast gtowifi_mainline userdebug; set -u
