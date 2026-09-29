@@ -134,6 +134,9 @@ TARGET_RECOVERY_PIXEL_FORMAT := BGRX_8888
 # SELinux
 BOARD_VENDOR_SEPOLICY_DIRS += \
     $(DEVICE_PATH)/sepolicy/vendor
+# rules that need types private to the platform policy
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += \
+    $(DEVICE_PATH)/sepolicy/private
 
 # VINTF
 DEVICE_MANIFEST_FILE := \
