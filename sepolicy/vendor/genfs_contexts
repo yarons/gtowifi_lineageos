@@ -5,9 +5,8 @@
 genfscon sysfs /devices/platform/soc@0/1a00000.display-subsystem	u:object_r:sysfs_gpu:s0
 genfscon sysfs /devices/platform/soc@0/1c00000.gpu			u:object_r:sysfs_gpu:s0
 
-# Backlight (light HAL)
+# Backlight (light HAL); mainline/common labels /class/backlight
 genfscon sysfs /devices/platform/backlight/backlight			u:object_r:vendor_sysfs_backlight:s0
-genfscon sysfs /class/backlight						u:object_r:vendor_sysfs_backlight:s0
 
 # Battery and charger, PMI632 (health HAL)
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply	u:object_r:sysfs_batteryinfo:s0
