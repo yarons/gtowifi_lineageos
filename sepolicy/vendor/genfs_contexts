@@ -26,6 +26,7 @@ genfscon sysfs /devices/platform/soc@0/4080000.remoteproc/wakeup	u:object_r:sysf
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply/pmi632-charger/wakeup	u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:rtc@6000/rtc/rtc0/alarmtimer.0.auto/wakeup	u:object_r:sysfs_wakeup:s0
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:pon@800/200f000.spmi:pmic@0:pon@800:pwrkey/wakeup	u:object_r:sysfs_wakeup:s0
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:extcon@1500/wakeup	u:object_r:sysfs_wakeup:s0
 
 # Remote processors: ADSP (c200000), WCNSS (a204000), modem (4080000, kernel r13 and later)
 genfscon sysfs /class/remoteproc					u:object_r:vendor_sysfs_remoteproc:s0
