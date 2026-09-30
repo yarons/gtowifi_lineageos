@@ -19,12 +19,13 @@ TARGET_QCOM_SOC := sdm429
 # /sys/class/power_supply/pmi632-battery and pmi632-charger; the kernel counts the charge. Our own
 # health HAL (health/) instead of mainline/common's default-aidl one: see "Health" below
 TARGET_HEALTH_HAL := gtowifi
-# Suspend (s2idle): OFF. It works on kernel r14 and later, but a screen-on after a resume sometimes
-# leaves the MDP scanning out of iova 0: the IOMMU fault interrupt of its context bank storms, CPU0
-# locks up and the tablet hangs (seen 2026-09-30 on r15 and r16). Until that is fixed in the kernel the
-# tablet stays awake with the screen off, like the release of 2026-09-21 (CPU idle states still save
-# power). The gate in docs/updating.md still applies before this goes back to true.
-TARGET_SUPPORTS_SUSPEND := false
+# Suspend (s2idle): ON, with kernel r15-mdpfix or later. Older kernels start the MDP's timing engine
+# before its flush on the screen-on after a resume: the first frame is fetched from iova 0, the IOMMU
+# fault interrupt storms and the tablet can hang (fixed by "drm/msm/mdp5: Flush before starting the video
+# timing engine", verified 2026-09-30: 40 suspends, 0 faults). A release still needs the gate in
+# docs/updating.md: repeated wake-ups by alarm and power key with display, touch, Wi-Fi, USB and audio
+# working afterwards, and an unplugged overnight measurement.
+TARGET_SUPPORTS_SUSPEND := true
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
 # Backlight: pwm-backlight on the PM8953 PWM, /sys/class/backlight/backlight, which the stack's lights
