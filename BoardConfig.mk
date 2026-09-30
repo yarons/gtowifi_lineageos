@@ -50,10 +50,9 @@ BOARD_KERNEL_CMDLINE := \
 # it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
 # (fastboot oem ramoops console, fastboot get_staged).
 
-# Still permissive: sepolicy/vendor covers what one boot and a round of the apps logged, it has not
-# run enforcing yet. The kernel's audit messages stay on so that the rest shows up in dmesg.
-BOARD_KERNEL_CMDLINE += \
-    androidboot.selinux=permissive
+# SELinux enforcing (build 33 on): sepolicy/vendor covers what the permissive builds 31 and 32 logged.
+# The kernel's audit messages stay on so that anything left shows up in dmesg. For a test,
+# androidboot.selinux=permissive can go back on the command line of a RAM-boot image.
 
 # Display
 # 800x1280 on 8 inches; same density as the official LineageOS tree

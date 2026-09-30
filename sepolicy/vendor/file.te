@@ -3,3 +3,6 @@ type vendor_sysfs_video4linux, fs_type, sysfs_type;
 
 # libcamera's memfds (tmpfs_domain in hal_camera_default.te)
 type hal_camera_default_tmpfs, file_type;
+
+# /proc/sys/kernel/firmware_config (genfs_contexts, stack_gaps.te)
+type vendor_proc_firmware_config, fs_type, proc_type;

@@ -19,11 +19,12 @@ TARGET_QCOM_SOC := sdm429
 # /sys/class/power_supply/pmi632-battery and pmi632-charger; the kernel counts the charge. Our own
 # health HAL (health/) instead of mainline/common's default-aidl one: see "Health" below
 TARGET_HEALTH_HAL := gtowifi
-# Suspend (s2idle): TEST. Needs kernel r14 or later (CPU idle states; the mdp5 fix without which the
-# second suspend fails in mdp5_pipe_release). A released build keeps it off until the gate in
-# docs/updating.md is passed: repeated wake-ups by alarm and power key with display, touch, Wi-Fi, USB
-# and audio working afterwards, and an unplugged overnight measurement.
-TARGET_SUPPORTS_SUSPEND := true
+# Suspend (s2idle): OFF. It works on kernel r14 and later, but a screen-on after a resume sometimes
+# leaves the MDP scanning out of iova 0: the IOMMU fault interrupt of its context bank storms, CPU0
+# locks up and the tablet hangs (seen 2026-09-30 on r15 and r16). Until that is fixed in the kernel the
+# tablet stays awake with the screen off, like the release of 2026-09-21 (CPU idle states still save
+# power). The gate in docs/updating.md still applies before this goes back to true.
+TARGET_SUPPORTS_SUSPEND := false
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
 # Backlight: pwm-backlight on the PM8953 PWM, /sys/class/backlight/backlight, which the stack's lights
