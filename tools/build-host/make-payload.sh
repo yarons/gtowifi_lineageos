@@ -18,8 +18,18 @@ DT=$TOP/android_device_samsung_gtowifi_mainline
 # Kernel line of this payload. Default: the stable one in sync-and-build.sh. Example:
 #   KERNEL_BASE=gtowifi/display-v2 KERNEL_BUNDLE=kernel/export-r15/gtowifi-android-7.1.3-r15.bundle \
 #   KERNEL_BRANCH=gtowifi/android-7.1.3-r15 ./make-payload.sh
-BUNDLE=${KERNEL_BUNDLE:-kernel/export-r5/gtowifi-android-7.1.3-r5.bundle}
-[ -f "$TOP/$BUNDLE" ] || { echo "no kernel bundle $TOP/$BUNDLE" >&2; exit 1; }
+# Or a kernel.org stable tag plus a patch series for `git am` (a kernel line on a base that is not on
+# GitHub, e.g. the 7.2.8 rebase):
+#   KERNEL_STABLE_TAG=v7.2.8 KERNEL_PATCHES=kernel/export-72-r16/patches KERNEL_BRANCH=gtowifi/android-7.2.8-r16 \
+#   ./make-payload.sh
+if [ -n "${KERNEL_PATCHES:-}" ]; then
+	[ -n "${KERNEL_STABLE_TAG:-}" ] || { echo "KERNEL_PATCHES needs KERNEL_STABLE_TAG" >&2; exit 1; }
+	ls "$TOP/$KERNEL_PATCHES"/*.patch >/dev/null 2>&1 || { echo "no patches in $TOP/$KERNEL_PATCHES" >&2; exit 1; }
+	BUNDLE=$KERNEL_PATCHES
+else
+	BUNDLE=${KERNEL_BUNDLE:-kernel/export-r5/gtowifi-android-7.1.3-r5.bundle}
+	[ -f "$TOP/$BUNDLE" ] || { echo "no kernel bundle $TOP/$BUNDLE" >&2; exit 1; }
+fi
 
 # The scripts go into the payload as build-host/, wherever this copy of them lives
 stage=$(mktemp -d)
@@ -27,7 +37,10 @@ trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/build-host"
 cp "$HERE"/check-host.sh "$HERE"/provision.sh "$HERE"/Dockerfile "$HERE"/sync-and-build.sh \
 	"$HERE"/run-container.sh "$stage/build-host/"
-if [ -n "${KERNEL_BASE:-}" ]; then
+if [ -n "${KERNEL_PATCHES:-}" ]; then
+	printf 'KERNEL_STABLE_TAG=%s\nKERNEL_PATCHES=%s\nKERNEL_BRANCH=%s\n' "$KERNEL_STABLE_TAG" "$KERNEL_PATCHES" \
+		"${KERNEL_BRANCH:-gtowifi/android-${KERNEL_STABLE_TAG#v}}" > "$stage/build-host/kernel.env"
+elif [ -n "${KERNEL_BASE:-}" ]; then
 	printf 'KERNEL_BASE=%s\nKERNEL_BUNDLE=%s\n' "$KERNEL_BASE" "$BUNDLE" > "$stage/build-host/kernel.env"
 	# the branch name inside the bundle, when it is not gtowifi/android-7.1.3
 	[ -z "${KERNEL_BRANCH:-}" ] || printf 'KERNEL_BRANCH=%s\n' "$KERNEL_BRANCH" >> "$stage/build-host/kernel.env"
@@ -39,4 +52,4 @@ COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$OUT" \
 	-C "$TOP" --exclude='.DS_Store' --exclude='gtowifi-mainline-payload.tar.gz' --exclude='android_device_samsung_gtowifi_mainline/tools/build-host/*.env' \
 	android_device_samsung_gtowifi_mainline "$BUNDLE" \
 	-C "$stage" build-host
-ls -l "$OUT"; echo "kernel: ${KERNEL_BASE:-default} / $BUNDLE"; echo "device tree at $(git -C "$DT" log --oneline -1)"
+ls -l "$OUT"; echo "kernel: ${KERNEL_STABLE_TAG:-${KERNEL_BASE:-default}} / $BUNDLE"; echo "device tree at $(git -C "$DT" log --oneline -1)"

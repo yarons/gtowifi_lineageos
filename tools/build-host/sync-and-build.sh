@@ -20,6 +20,8 @@ KERNEL_BASE=gtowifi/battery-v2       # public integration line: PM8953 USID fix,
                                      # bundle's prerequisite
 KERNEL_BUNDLE=kernel/export-r5/gtowifi-android-7.1.3-r5.bundle   # the four ANDROID-only commits
 KERNEL_BRANCH=gtowifi/android-7.1.3
+# or, from kernel.env: KERNEL_STABLE_TAG (e.g. v7.2.8) + KERNEL_PATCHES (a directory of the payload)
+KERNEL_STABLE_URL=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
 # make-payload.sh can put another kernel line into the payload (KERNEL_BASE, KERNEL_BUNDLE)
 # shellcheck disable=SC1091
 [ -f "$HERE/kernel.env" ] && . "$HERE/kernel.env"
@@ -32,12 +34,7 @@ step_sync() {
 	repo sync -c -j"${JOBS:-4}" --no-tags --fail-fast
 }
 
-step_sources() {
-	cd "$LINEAGE_DIR"
-	# device tree: a plain git checkout next to repo's projects (not in a manifest until it is on GitHub)
-	rm -rf device/samsung/gtowifi_mainline
-	mkdir -p device/samsung
-	git clone -q "$PAYLOAD_DIR/android_device_samsung_gtowifi_mainline" device/samsung/gtowifi_mainline
+kernel_from_bundle() {
 	# kernel: public base branch, then the four Android-only commits from the bundle
 	if [ ! -d kernel/mainline/msm89x7-mainline/.git ]; then
 		mkdir -p kernel/mainline
@@ -50,6 +47,33 @@ step_sources() {
 		"$KERNEL_BRANCH"
 	git -C kernel/mainline/msm89x7-mainline checkout -q -B "$KERNEL_BRANCH" FETCH_HEAD
 	git -C kernel/mainline/msm89x7-mainline log --oneline -5
+}
+
+kernel_from_patches() {
+	# kernel: a kernel.org stable tag, then the whole series from the payload with `git am` (a line whose base
+	# is not on GitHub). A fresh shallow clone each time: the series is applied from scratch.
+	local k=kernel/mainline/msm89x7-mainline
+	rm -rf "$k"
+	mkdir -p kernel/mainline
+	git clone -q --depth 1 --branch "$KERNEL_STABLE_TAG" "$KERNEL_STABLE_URL" "$k"
+	git -C "$k" checkout -q -b "$KERNEL_BRANCH"
+	git -C "$k" -c user.name=build -c user.email=build@localhost am -q --committer-date-is-author-date \
+		"$PAYLOAD_DIR/$KERNEL_PATCHES"/*.patch
+	git -C "$k" log --oneline -3
+	echo "kernel: $KERNEL_STABLE_TAG + $(ls "$PAYLOAD_DIR/$KERNEL_PATCHES"/*.patch | wc -l) patches"
+}
+
+step_sources() {
+	cd "$LINEAGE_DIR"
+	# device tree: a plain git checkout next to repo's projects (not in a manifest until it is on GitHub)
+	rm -rf device/samsung/gtowifi_mainline
+	mkdir -p device/samsung
+	git clone -q "$PAYLOAD_DIR/android_device_samsung_gtowifi_mainline" device/samsung/gtowifi_mainline
+	if [ -n "${KERNEL_PATCHES:-}" ]; then
+		kernel_from_patches
+	else
+		kernel_from_bundle
+	fi
 	# the mainline stack: roomservice cannot resolve lineage.dependencies for a device tree outside the
 	# LineageOS organisation, and device.mk includes the stack before roomservice would run anyway
 	mkdir -p .repo/local_manifests
