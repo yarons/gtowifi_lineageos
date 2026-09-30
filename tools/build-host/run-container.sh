@@ -5,13 +5,14 @@
 #   DETACH=1 NAME=lineage-sync ./run-container.sh <command...>   same, detached, logged to $BASE/logs/$NAME.log
 #
 # Isolation on a shared host: nothing is installed on the host; source, ccache and output live under
-# $BASE (default /mnt/lineage); memory is capped (MEM, or MEM=none on a host that has to swap); CPUs are
+# $BASE (default ~/lineage); memory is not capped by default (MEM=none: a 16 GB host has to swap; set MEM,
+# e.g. 96g, on a shared machine); CPUs are
 # whatever the host leaves to ordinary processes (CPUs it isolates with isolcpus are never used).
 set -euo pipefail
-BASE=${BASE:-/mnt/lineage}
+BASE=${BASE:-$HOME/lineage}
 IMAGE=${IMAGE:-lineage-build}
 NAME=${NAME:-lineage-build}
-MEM=${MEM:-96g}
+MEM=${MEM:-none}
 DOCKER=${DOCKER:-sudo -n docker}
 if [ -z "${CPUS:-}" ] && [ -s /sys/devices/system/cpu/isolated ]; then
 	# everything except the cores the host isolates for its own real-time work

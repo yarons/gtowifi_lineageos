@@ -7,25 +7,27 @@
 #
 # The host is described by environment variables, best kept in an env file per host (see
 # host.env.example): HOST (ssh destination, required), BASE (where tree, ccache and output live,
-# default /mnt/lineage), REQUIRE_MOUNT (1: BASE must be a mounted file system), MEM (container memory
-# cap, or none), BUILD_JOBS (parallel build jobs; unset = all threads), INHIBIT (1: keep the host awake).
+# default ~/lineage on the host), REQUIRE_MOUNT (1: BASE must be a mounted file system), MEM (container
+# memory cap, or none), BUILD_JOBS (parallel build jobs; empty = all threads), INHIBIT (1: keep the host
+# awake). The defaults are those of the tested host, a laptop with 16 GB RAM prepared by
+# setup-arch-host.sh; a big machine sets MEM and BUILD_JOBS= (empty) instead.
 # STEPS: the sync-and-build.sh steps to run, default "sources patches build"; a new host needs
 # "sync sources patches build" (the sync alone is a download of well over 100 GB).
 # The container image is built from the payload's Dockerfile when the host does not have it yet.
 # INHIBIT=1 keeps the host from sleeping for as long as the container runs (systemd-inhibit).
 set -euo pipefail
 HOST=${HOST:?set HOST (ssh destination of the build host), e.g. from an env file}
-BASE=${BASE:-/mnt/lineage}
-REQUIRE_MOUNT=${REQUIRE_MOUNT:-1}
+SSH="ssh -o BatchMode=yes -o ConnectTimeout=15"
+BASE=${BASE:-$($SSH "$HOST" 'echo $HOME')/lineage}
+REQUIRE_MOUNT=${REQUIRE_MOUNT:-0}
 NAME=${NAME:-lineage-build3}
 STEPS=${STEPS:-sources patches build}
-MEM=${MEM:-96g}
-BUILD_JOBS=${BUILD_JOBS:-}
-INHIBIT=${INHIBIT:-0}
+MEM=${MEM:-none}
+BUILD_JOBS=${BUILD_JOBS-4}
+INHIBIT=${INHIBIT:-1}
 IMAGE=${IMAGE:-lineage-build}
 HERE=$(cd "$(dirname "$0")" && pwd)
 PAYLOAD=${PAYLOAD:-$HERE/gtowifi-mainline-payload.tar.gz}
-SSH="ssh -o BatchMode=yes -o ConnectTimeout=15"
 
 [ -f "$PAYLOAD" ] || { echo "run make-payload.sh first" >&2; exit 1; }
 if [ "$REQUIRE_MOUNT" = 1 ]; then
