@@ -6,3 +6,6 @@ type hal_camera_default_tmpfs, file_type;
 
 # /proc/sys/kernel/firmware_config (genfs_contexts, stack_gaps.te)
 type vendor_proc_firmware_config, fs_type, proc_type;
+
+# The charger's charging_enabled (genfs_contexts): written by LineageOS' charging control
+type vendor_sysfs_charging_enabled, fs_type, sysfs_type;

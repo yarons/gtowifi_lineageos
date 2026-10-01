@@ -114,6 +114,17 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     android.hardware.health-service.gtowifi
 
+# Charging control (LineageOS Settings > Battery > Charging control): LineageOS' health HAL in toggle
+# mode on the charger's charging_enabled (kernel "qcom_smbx: Add charge_behaviour and charging_enabled";
+# 0 stops charging, the tablet keeps running from USB). A kids' tablet sits on its charger for days;
+# held below full the pack ages more slowly.
+PRODUCT_PACKAGES += \
+    vendor.lineage.health-service.default
+$(call soong_config_set,lineage_health,charging_control_charging_path,/sys/class/power_supply/pmi632-charger/charging_enabled)
+$(call soong_config_set,lineage_health,charging_control_charging_enabled,1)
+$(call soong_config_set,lineage_health,charging_control_charging_disabled,0)
+$(call soong_config_set,lineage_health,charging_control_supports_bypass,false)
+
 # HIDL
 PRODUCT_PACKAGES += \
     vndservicemanager

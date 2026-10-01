@@ -11,6 +11,9 @@ genfscon sysfs /devices/platform/backlight/backlight			u:object_r:vendor_sysfs_b
 # Battery and charger, PMI632 (health HAL)
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply	u:object_r:sysfs_batteryinfo:s0
 
+# ... except its charging switch, which LineageOS' charging control writes (hal_lineage_health_default)
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-02/200f000.spmi:pmic@2:charger@1000/power_supply/pmi632-charger/charging_enabled	u:object_r:vendor_sysfs_charging_enabled:s0
+
 # RTC, PM8953 (timekeep, system_server)
 genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-00/200f000.spmi:pmic@0:rtc@6000/rtc/rtc0		u:object_r:sysfs_rtc:s0
 

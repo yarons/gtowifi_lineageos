@@ -40,6 +40,9 @@ on post-fs
 # their device tree have no such remoteproc: nothing is started then.
 on boot
     start vendor.gtowifi-modem
+    # Charging control: LineageOS' health HAL runs as system (device.mk)
+    chown system system /sys/class/power_supply/pmi632-charger/charging_enabled
+    chmod 0664 /sys/class/power_supply/pmi632-charger/charging_enabled
 
 # Switched at run time; rmtfs stops the modem when it exits (it was started with -s)
 on property:sys.boot_completed=1 && property:persist.vendor.gtowifi.gnss=1
