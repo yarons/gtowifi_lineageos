@@ -5,42 +5,60 @@
 builds (those stop at 22.2 on Samsung's 4.9 kernel). This one runs Linux 7.1.3 from the msm89x7-mainline
 fork with a board port for the tablet, on LineageOS's own mainline-kernel device stack.
 
-Built from https://github.com/yarons/gtowifi_lineageos branch `lineage-23.2` (commit `1f9870f`) and the
-kernel https://github.com/yarons/linux_msm89x7 branch `gtowifi/android-7.1.3-r12` (commit `fe8e5b841`).
+Built from https://github.com/yarons/gtowifi_lineageos branch `lineage-23.2` (merge `11fb135`; the
+images are build 35 of commit `ee4094d`, which differs only in `tools/build-host/`) and the kernel
+https://github.com/yarons/linux_msm89x7 branch `gtowifi/android-7.1.3-r17` (commit `a6c91b0df`).
 No proprietary files are in the images: Wi-Fi/Bluetooth, DSP and codec firmware is read from the
 tablet's own partitions, GPU microcode comes from linux-firmware.
 
+## What is new since the pre-release of 2026-09-21
+
+- **SELinux enforcing.**
+- **System suspend and CPU idle states.** Measured on the author's tablet: **0.43 % battery per hour**
+  unplugged with the screen off and Wi-Fi on, 9 to 10 days on a charge (the previous pre-release: 1.7 %
+  per hour). Wi-Fi disconnects while the tablet sleeps and reconnects within about 20 s of switching the
+  screen on.
+- **Charging control** (Settings > Battery > Charging control): a tablet that lives on its charger can
+  be held at e.g. 80 % instead of full.
+- **Empty battery:** the battery reads 0 % and Android shuts down cleanly before the pack cuts the
+  power (it used to switch off hard at about 3 %). Verified with a raised test threshold; a run-down to
+  the real threshold is still to be done.
+- **The clock survives a restart without network** (TimeKeep).
+- GPS: the modem and its location service start when asked for (`setprop persist.vendor.gtowifi.gnss 1`
+  as root); off by default because a running modem costs standby time. A position fix is untested.
+- USB host (OTG) support in the kernel (untested under Android).
+
 ## Read this before you flash
 
-- **userdebug build, test-keys, SELinux permissive, `adb root` works.** Do not keep anything sensitive
-  on it. This is a bring-up build.
-- **The battery drains fast when the tablet is idle.** System suspend is switched off and the CPUs have
-  no idle states yet (kernel work in progress). Switch the tablet off when it is not used.
+- **userdebug build, test-keys, `adb root` works.** Do not keep anything sensitive on it.
 - Coming from Samsung's firmware or the official LineageOS build, **`userdata` has to be formatted**:
   the old data is encrypted with keys in Qualcomm's secure world, which a mainline kernel cannot reach.
-  The same applies on the way back. Make a backup first.
+  The same applies on the way back. Make a backup first. Coming from the pre-release of 2026-09-21,
+  `userdata` can stay (that is how the author's tablet was updated).
 - You need an **unlocked boot loader and lk2nd in the BOOT and RECOVERY partitions** first (see
   "Install"). Flashing a boot chain can leave a tablet that only starts in download mode; you should be
   comfortable restoring stock firmware with Odin. You do this at your own risk.
 
 ## What works (seen on the author's tablet)
 
-Boot from the eMMC in under a minute, display with the real DRM driver, GPU (freedreno, OpenGL ES 3.1),
-backlight control, touch, keys, Wi-Fi on 2.4 and 5 GHz (WPA2), speakers, built-in microphone,
-accelerometer/auto-rotate and proximity, battery gauge and charging, USB (adb, MTP), Bluetooth (pairing,
-music to a Bluetooth headset), wired headphones, microSD cards (a 64 GB exFAT card tested), both cameras through
-libcamera's software ISP (preview, photos, 720p video with AAC sound at about 14 fps, autofocus and tap to focus on the
-rear camera, exposure compensation), boots by itself once the boot image sits behind lk2nd. This exact
-set of images runs on the author's tablet.
+Boot from the eMMC by itself in under a minute, display with the real DRM driver, GPU (freedreno,
+OpenGL ES 3.1), backlight control, touch, keys, Wi-Fi on 2.4 and 5 GHz (WPA2), speakers, built-in
+microphone, accelerometer/auto-rotate and proximity, battery gauge, charging and charging control,
+suspend with wake-up by power key and alarms, USB (adb, MTP), Bluetooth (pairing, music to a Bluetooth
+headset), wired headphones (pre-release; not re-checked with this build), microSD cards (a 64 GB exFAT
+card), both cameras through libcamera's software ISP (preview, photos, 720p video with AAC sound at about
+14 fps, autofocus and tap to focus on the rear camera, exposure compensation), video playback up to
+1080p at 30 fps or 720p at 60 fps (software decoding). This exact set of images runs on the author's
+tablet.
 
 ## What does not, or was not tested
 
-Suspend and CPU idle (see above), SELinux enforcing, GPS (the HAL is in the build, the kernel part is
-not in this release), USB host/OTG (works with a newer kernel branch, not in this release), Bluetooth
-calls and Bluetooth microphones (the kernel does not route the chip's voice line yet), a wired headset
-microphone (untested),
-rear photos above 2 MP (the 8 MP sensor mode gives 5 fps through the CPU ISP and is switched off), no
-colour correction matrix, lens shading correction or noise reduction in the cameras, hardware video codecs (none: software codecs only).
+Bluetooth calls and Bluetooth microphones (the kernel does not route the chip's voice line yet), a wired
+headset microphone, GPS fixes, USB host under Android, 1080p at 60 fps (too much for software decoding;
+NewPipe and similar apps should be set to 720p), rear photos above 2 MP (the 8 MP sensor mode gives 5 fps
+through the CPU ISP and is switched off), camera colours are pale (no colour correction matrix, lens
+shading correction or noise reduction), hardware video codecs (none: software codecs only). The SoC's
+deepest sleep state needs a newer kernel line that is not stable yet.
 
 ## Files
 
@@ -52,7 +70,7 @@ colour correction matrix, lens shading correction or noise reduction in the came
 | `boot-fastboot-v0.img` | behind lk2nd in `boot`, or `fastboot boot` | Android boot image, header v0 with the DTB appended: what lk2nd releases understand |
 | `boot.img.mkbootimg` | - | the same as header v2, for an lk2nd built with `OSVERSION_IN_BOOTIMAGE=1` |
 | `lk2nd-gtowifi-64MiB.img.xz` | `recovery` and `boot` | the boot loader stage that gives fastboot and starts the Android boot image, see "Install" |
-| `pinned-manifest-2026-09-21.xml` | - | `repo manifest -r` of the build: every LineageOS project at its exact commit |
+| `pinned-manifest-2026-10-02.xml` | - | `repo manifest -r` of the build: every LineageOS project at its exact commit |
 | `SHA256SUMS` | | checksums, also of the two unpacked files |
 
 The boot image and `vendor_dlkm.img` belong together: never mix them between releases.
@@ -127,5 +145,5 @@ has to be formatted again.
 
 Device tree: Apache-2.0. Kernel: GPL-2.0, full history in the branch named above. libcamera v0.7.2
 (LGPL-2.1-or-later) with the patches in `libcamera/patches/` of the device tree, built through
-GloDroid's aospext. The exact revisions of all 1179 LineageOS projects of this build are in
-`pinned-manifest-2026-09-21.xml` (attached).
+GloDroid's aospext. The exact revisions of all LineageOS projects of this build are in
+`pinned-manifest-2026-10-02.xml` (attached).

@@ -4,12 +4,12 @@ Device tree for the SM-T290 (`gtowifi`, Qualcomm SDM429) running a **mainline Li
 Samsung's 4.9 vendor kernel. Product name `gtowifi_mainline`. UNOFFICIAL, not affiliated with the
 official `gtowifi` LineageOS builds.
 
-> **State: boots to the launcher from the eMMC (first boot 2026-09-20), real display driver and GPU
-> rendering, Wi-Fi, sound, sensors and both cameras work, SELinux permissive. Not a daily driver.** Derived from the `mi439_mainline` target of
-> `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439: same kernel fork, same lk2nd
-> platform, same touchscreen and Wi-Fi/Bluetooth drivers). Started with `fastboot boot` from lk2nd; the
-> combined boot image in the BOOT partition is still untried. See the hardware table for what was
-> actually seen working.
+> **State (2026-10-02): boots by itself from the eMMC (boot image behind lk2nd in BOOT), real display
+> driver and GPU rendering, Wi-Fi, sound, sensors and both cameras work, SELinux enforcing, system
+> suspend on: about 0.4 % battery per hour with the screen off (9 to 10 days on a charge).** Derived
+> from the `mi439_mainline` target of `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439:
+> same kernel fork, same lk2nd platform, same touchscreen and Wi-Fi/Bluetooth drivers). See the hardware
+> table for what was actually seen working.
 
 It sits on LineageOS's mainline-kernel stack and adds nothing generic of its own:
 
@@ -28,7 +28,7 @@ eBPF features its 4.9 kernel does not have.
 
 | Path | URL | Branch |
 |---|---|---|
-| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/android-7.1.3-r12`, which is `gtowifi/display-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads, 12nm DSI PHY, ILI9881C panel, GPU). plus the cameras (sensor drivers, lens, CAMSS board nodes), the backlight, the 2.4 GHz Wi-Fi fix, the two DRM fixes named in the hardware table and the Android patches below | 7.1.3 |
+| `kernel/mainline/msm89x7-mainline` | https://github.com/msm89x7-mainline/linux 7.1.3 + the gtowifi board work in https://github.com/yarons/linux_msm89x7, branch `gtowifi/android-7.1.3-r17`, which is `gtowifi/display-v2` (`sdm429-samsung-gtowifi.dts`, PM8953 second SPMI slave, `aw87319` amplifier driver, sound card, PMI632 charger and fuel gauge, regulator loads, 12nm DSI PHY, ILI9881C panel, GPU) plus the cameras (sensor drivers, lens, CAMSS board nodes), the backlight, the 2.4 GHz Wi-Fi fix, the two DRM fixes named in the hardware table, the modem/GNSS and USB host (OTG) board parts, CPU idle states and suspend fixes, the empty-battery rule of the PMI632 gauge, the MDP flush-order fix and the charger's charging switch (`charge_behaviour`, `charging_enabled`), and the Android patches below | 7.1.3 |
 
 Patches needed on top, from `kernel/common-patches` (`main-kernel/android-mainline`), exactly as for the
 other msm89x7 targets of the stack:
@@ -59,13 +59,15 @@ Seen on the tablet on 2026-09-20 and 2026-09-21 unless marked otherwise.
 | Display | drm/msm MDP5 with a driver for the SDM429 12nm DSI PHY and the ILI9881C panel. The backlight is a `pwm-backlight` on the PM8953 PWM (`/sys/class/backlight/backlight`). Android needs two fixes: drm/msm leaked the GEM objects of clients without their own GPU address space (`msm_gem_close`), and `fence_to_crtc()` races with the signalling of a CRTC out-fence, a kernel BUG after a few hours because Android reads `SYNC_IOC_FILE_INFO` of every out-fence | drm_hwcomposer + minigbm; the brightness setting reaches the backlight through the stack's lights HAL. `mdp5_crtc_atomic_check: too many planes` in the kernel log is harmless (3 blend stages, the composer falls back to the GPU) |
 | GPU (Adreno 504, driven as A505) | drm/msm | Mesa freedreno, OpenGL ES 3.1 (`FD505`) |
 | Audio (ADSP, PM8953 codec, 2x `aw87319`) | sound card registers, both amplifiers probe; playback and the built-in microphone work; the jack reports headphones and microphones. The headset wiring switch (CTIA/OMTP, TLMM 63 per Samsung's device tree) is not driven | tinyhal, `audio/audio.gtowifi_mainline.xml`: speakers, the built-in microphone and wired headphones (detected, switched to, heard) work. Software noise suppression and gain control for the microphone are configured (`audio/audio_effects.xml`) but not verified; a wired headset microphone is untested |
-| Battery, charging (PMI632) | SMB5 charger + fuel gauge (level, voltage, OCV, current, charge) | real level, voltage, temperature and charger state through the default health AIDL HAL |
+| Battery, charging (PMI632) | SMB5 charger + fuel gauge (level, voltage, OCV, current, charge). A pack whose loaded voltage stays below its minimum while discharging is reported empty, so that Android shuts down before the pack cuts the power. The charger can stop charging while the tablet keeps running from USB (`charging_enabled`) | real level, voltage, temperature and charger state through this tree's health HAL (`health/`, empty battery reads 0 %). LineageOS charging control (Settings > Battery > Charging control) works: with a limit set, charging stops there and resumes below it. Android's charging status follows within a minute |
 | Sensors (behind the ADSP) | accelerometer and proximity appear as IIO devices (`qcom_sns_reg` serves the registry from `persist`, then `qcom_smgr`); no gyroscope | IIO sensors HAL: both work, auto-rotate works. Needs the ueventd rules, the HAL restart after the ADSP is up and the axis properties of this tree |
-| Suspend | s2idle only, no cpuidle states yet. A manual suspend and RTC wake-up work; after Android's own suspend cycles the ADSP audio path stops answering | off (`TARGET_SUPPORTS_SUSPEND := false`) until the kernel side is fixed |
+| Suspend | s2idle with CPU idle states (WFI, power collapse). A screen-on after a resume used to start the MDP before its flush and could hang the tablet in an IOMMU fault storm; fixed in r17 (`drm/msm/mdp5: Flush before starting the video timing engine`, 0 faults in 1000+ suspends). The SoC itself does not power down (no RPM vlow/vmin) on this kernel | on (`TARGET_SUPPORTS_SUSPEND := true`): wake-ups by power key and alarm work, Wi-Fi disconnects during suspend (no WoWLAN set up) and reconnects within about 20 s of a screen-on. Measured 2026-10-01/02: **0.43 % per hour** unplugged with the screen off and Wi-Fi on (1.7 % per hour without suspend) |
 | Cameras (GC8034 rear with focus motor, GC2375H front, on CAMSS) | sensor and lens drivers from the board work; raw Bayer frames through V4L2 | libcamera 0.7.2: simple pipeline handler with the software ISP (CPU), its Android HAL under the legacy camera provider, and the patches in `libcamera/patches/` (the HAL did not work with this kind of camera as it is). Preview at 21 to 24 fps (rear in the binned 1624x1224 mode; the 8 MP mode gives about 5 fps and is switched off in `libcamera/camera_hal.yaml`), photos (rear 2 MP), video with sound, continuous autofocus and tap to focus, exposure compensation, camera ids pinned (rear 0, front 1). No colour correction matrix, no lens shading correction and no noise reduction: pure colours are pale and low light is noisy. Video records at up to 720p with AAC sound (`media/`), at about 14 frames per second: the software encoder and the software ISP share four cores |
-| GNSS | the location engine runs on the modem DSP, which this Wi-Fi model has too. With one more board commit (not in the kernel branch above yet) the modem boots and its QMI location service (LOC v2 over QRTR) gives a fix | `gnss/`: an AIDL GNSS HAL that speaks QMI LOC over QRTR without any proprietary library, plus the modem bring-up (firmware from the tablet's `modem` partition, `rmtfs` read-only so that the EFS partitions are never written). Builds and registers; has not had a modem to talk to yet |
-| SELinux | | permissive |
-| RAM | | tight (1.9 GB). zram needs the init script of this tree: `swapon_all` fails on current kernels |
+| GNSS | the location engine runs on the modem DSP, which this Wi-Fi model has too: the modem boots and its QMI location service (LOC v2 over QRTR) comes up. A modem that has run once keeps the SoC out of its deepest sleep until the next restart | `gnss/`: an AIDL GNSS HAL that speaks QMI LOC over QRTR without any proprietary library, plus the modem bring-up (firmware from the tablet's `modem` partition, `rmtfs` read-only so that the EFS partitions are never written, `tqftpserv` for its configuration files). **Off by default** to save power: `setprop persist.vendor.gtowifi.gnss 1` (and a restart after switching it off again). A position fix under Android is untested |
+| USB host (OTG) | micro-USB ID detection and the VBUS boost of the PMI632, `usb-storage` built in | untested under Android |
+| SELinux | | **enforcing**: `sepolicy/vendor` for the device, `sepolicy/private` (system_ext) for the few rules that need platform-private types. Shared memory from libcutils is labelled `ashmem_compat_memfd` (a patch in `patches/system/core`), so it needs no rule per pair of processes |
+| Time | the PM8953 RTC cannot be set | Sony's TimeKeep (from the stack) keeps the offset, so the clock is right after a restart without network |
+| RAM | | tight (1.9 GB). zram (1 GB) needs the init script of this tree: `swapon_all` fails on current kernels |
 
 No proprietary files are part of the build. Radio, DSP and codec firmware is loaded from the tablet's
 own partitions; GPU microcode comes from linux-firmware.
@@ -75,7 +77,7 @@ own partitions; GPU microcode comes from linux-firmware.
 Samsung bootloader -> lk2nd (first image in the partition) -> Android boot image at 512 KiB.
 Bootloaders with binary revision 4 or later want a `SignerVer02` block behind the first image and an AVB
 footer at the end of the partition; `mkbootimg.mk` adds both (lk2nd with its block is 326160 bytes, so it
-fits below the offset). **This combined image has not been tried on hardware.**
+fits below the offset). Works on the author's tablet since 2026-09-21: it starts LineageOS by itself.
 
     tools/check-boot-layout.py $OUT/boot.img
 
