@@ -1,0 +1,8 @@
+# LineageOS' health HAL (charging control, toggle mode): it finds the charger through
+# /sys/class/power_supply and writes its charging_enabled (device.mk, genfs_contexts)
+allow hal_lineage_health_default sysfs_batteryinfo:dir r_dir_perms;
+allow hal_lineage_health_default sysfs_batteryinfo:lnk_file read;
+allow hal_lineage_health_default vendor_sysfs_charging_enabled:file rw_file_perms;
+
+# init.gtowifi.rc hands the file to the HAL's user
+allow vendor_init vendor_sysfs_charging_enabled:file { getattr setattr };

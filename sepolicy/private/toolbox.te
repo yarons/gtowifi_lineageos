@@ -1,0 +1,5 @@
+# init.gtowifi.rc sets up zram itself (the stack's swapon_all fails on current kernels, see there) and runs
+# /system/bin/swapon through exec, which lands in toolbox. swapon(2) needs CAP_SYS_ADMIN (denied: swapon
+# sys_admin, toolbox): without this the tablet runs without swap when enforcing. toolbox is private to the
+# platform policy, so the rule is here.
+allow toolbox self:capability sys_admin;

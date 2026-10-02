@@ -1,0 +1,21 @@
+# Shared memory between processes. On phones the ashmem driver backs these regions (ashmem_device). The
+# mainline kernel has no ashmem driver: libcutils uses memfd (sys.use_memfd=true) and the memfds keep
+# their creator's <domain>_tmpfs (or plain tmpfs) label. The kernel supports the memfd_class policy
+# capability that labels memfds for exactly this, but the platform policy of LineageOS 23.2 does not
+# enable it. STOPGAP until either happens (memfd_class in the platform policy, or an ashmem driver):
+# the pairs seen on the tablet on 2026-09-24, nothing more.
+
+# Audio: sound effects (SoundPool), the mixer and the audio HAL's message queues
+allow audioserver { appdomain_tmpfs system_server_tmpfs tmpfs }:file { map read write };
+allow system_server { audioserver_tmpfs tmpfs }:file { map read write };
+allow appdomain audioserver_tmpfs:file write;
+allow hal_audio_default tmpfs:file { ioctl map read write };
+
+# Media: codecs, extractor and thumbnails
+allow mediaswcodec { appdomain_tmpfs mediaserver_tmpfs system_server_tmpfs tmpfs }:file { map read write };
+allow mediaserver mediaextractor_tmpfs:file { map read write };
+allow appdomain { mediaserver_tmpfs tmpfs }:file { map read write };
+
+# Bluetooth audio and the power HAL's message queue
+allow bluetooth tmpfs:file { map read write };
+allow hal_power_default tmpfs:file { ioctl map read write };

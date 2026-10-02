@@ -1,0 +1,6 @@
+# Sony's TimeKeep (hardware/sony/timekeep) keeps the RTC offset across restarts. The stack's
+# seapp_contexts gives it vendor_timekeep_app only as user=system, but its manifest has no
+# sharedUserId, so it runs under its own app uid and fell into platform_app: when enforcing it could
+# neither set persist.vendor.timeadjust nor read the RTC (seen with build 34), and the clock was not kept
+# across a restart without network. Same domain for the app uid.
+user=_app seinfo=platform name=com.sony.timekeep domain=vendor_timekeep_app type=app_data_file levelFrom=all

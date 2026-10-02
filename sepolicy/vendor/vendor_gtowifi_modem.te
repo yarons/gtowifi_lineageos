@@ -1,0 +1,17 @@
+# init.gtowifi.modem.sh: waits until the modem's remoteproc driver is bound, then sets
+# vendor.gtowifi.modem.state, on which init starts rmtfs
+type vendor_gtowifi_modem, domain;
+type vendor_gtowifi_modem_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(vendor_gtowifi_modem)
+
+allow vendor_gtowifi_modem vendor_shell_exec:file rx_file_perms;
+allow vendor_gtowifi_modem vendor_toolbox_exec:file rx_file_perms;
+
+# [ -e ] on /sys/bus/platform/devices/4080000.remoteproc and on the driver's link to it
+allow vendor_gtowifi_modem sysfs:dir { getattr search };
+allow vendor_gtowifi_modem sysfs:lnk_file read;
+
+allow vendor_gtowifi_modem kmsg_device:chr_file w_file_perms;
+
+set_prop(vendor_gtowifi_modem, vendor_gtowifi_prop)

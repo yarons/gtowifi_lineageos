@@ -40,19 +40,19 @@ BOARD_KERNEL_CMDLINE := \
     androidboot.fstab_suffix=$(GTOWIFI_FSTAB_SUFFIX) \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
-    console=tty0 \
     lk2nd.pass-ramoops=zap \
     panic=5
 
+# No console=tty0: the kernel log does not scroll over the screen at boot (this is a tablet for
+# children); the serial console of mainline/qcom-common and ramoops still get it.
 # panic=5: reboot five seconds after a panic. The default, 0, leaves a panicked kernel sitting there:
 # the tablet looks frozen, still enumerates on USB, and only the Power + Volume Down combination gets
 # it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
 # (fastboot oem ramoops console, fastboot get_staged).
 
-# TODO: write sepolicy for the mainline services, then drop this
-BOARD_KERNEL_CMDLINE += \
-    androidboot.selinux=permissive \
-    audit=0
+# SELinux enforcing (build 33 on): sepolicy/vendor covers what the permissive builds 31 and 32 logged.
+# The kernel's audit messages stay on so that anything left shows up in dmesg. For a test,
+# androidboot.selinux=permissive can go back on the command line of a RAM-boot image.
 
 # Display
 # 800x1280 on 8 inches; same density as the official LineageOS tree
@@ -129,6 +129,13 @@ BOARD_RAMDISK_USE_LZ4 := true
 TARGET_RECOVERY_DENSITY := hdpi
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/fstab/fstab.gtowifi
 TARGET_RECOVERY_PIXEL_FORMAT := BGRX_8888
+
+# SELinux
+BOARD_VENDOR_SEPOLICY_DIRS += \
+    $(DEVICE_PATH)/sepolicy/vendor
+# rules that need types private to the platform policy
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += \
+    $(DEVICE_PATH)/sepolicy/private
 
 # VINTF
 DEVICE_MANIFEST_FILE := \

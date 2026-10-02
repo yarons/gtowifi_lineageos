@@ -1,0 +1,10 @@
+# Harmless, and noisy
+
+# Apps in isolated processes look for the content capture service
+dontaudit isolated_app content_capture_service:service_manager find;
+# fsck of SD cards reads block statistics it does not need (storaged does too, but its type is private
+# to the system policy)
+dontaudit fsck_untrusted sysfs_devices_block:dir r_dir_perms;
+dontaudit fsck_untrusted sysfs_devices_block:file r_file_perms;
+# installd asks every mounted file system for quotas, persist and the firmware partition too
+dontaudit installd firmware_mnt_file:filesystem quotaget;

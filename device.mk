@@ -16,9 +16,16 @@ TARGET_QCOM_SOC := sdm429
 # Audio: tinyhal (the default of mainline/qcom-common) on the ADSP + PM8953 codec + 2x aw87319 sound
 # card; mixer paths in audio/audio.gtowifi_mainline.xml
 # Battery: PMI632 SMB5 charger + simple-battery (kernel gtowifi/integration) show up as
-# /sys/class/power_supply/pmi632-battery and pmi632-charger; capacity is voltage/OCV based
-TARGET_HEALTH_HAL := default-aidl
-TARGET_SUPPORTS_SUSPEND := false
+# /sys/class/power_supply/pmi632-battery and pmi632-charger; the kernel counts the charge. Our own
+# health HAL (health/) instead of mainline/common's default-aidl one: see "Health" below
+TARGET_HEALTH_HAL := gtowifi
+# Suspend (s2idle): ON, with kernel r15-mdpfix or later. Older kernels start the MDP's timing engine
+# before its flush on the screen-on after a resume: the first frame is fetched from iova 0, the IOMMU
+# fault interrupt storms and the tablet can hang (fixed by "drm/msm/mdp5: Flush before starting the video
+# timing engine", verified 2026-09-30: 40 suspends, 0 faults). A release still needs the gate in
+# docs/updating.md: repeated wake-ups by alarm and power key with display, touch, Wi-Fi, USB and audio
+# working afterwards, and an unplugged overnight measurement.
+TARGET_SUPPORTS_SUSPEND := true
 # Display: mdp5 + 12nm DSI PHY + ILI9881C panel and the Adreno 504 (as FD505) from kernel branch
 # gtowifi/display-v2 -> the defaults of mainline/common apply: Mesa freedreno, gbm, drm_hwcomposer.
 # Backlight: pwm-backlight on the PM8953 PWM, /sys/class/backlight/backlight, which the stack's lights
@@ -86,18 +93,37 @@ TARGET_BOOTANIMATION_HALF_RES := true
 $(call inherit-product, frameworks/native/build/tablet-7in-hdpi-1024-dalvik-heap.mk)
 
 # GNSS: the location engine runs on the modem DSP. rmtfs (read-only, see init.gtowifi.rc) has to
-# serve the modem before it boots; the HAL speaks QMI LOC over QRTR
+# serve the modem before it boots; tqftpserv serves the files it asks for over TFTP (its MCFG
+# configuration); the HAL speaks QMI LOC over QRTR
 PRODUCT_PACKAGES += \
     android.hardware.gnss-service.qmiloc \
     init.gtowifi.modem.sh \
     rmtfs \
-    rmtfs.rc
+    rmtfs.rc \
+    tqftpserv \
+    tqftpserv.rc
 
 PRODUCT_VENDOR_PROPERTIES += \
     vendor.remoteproc.4080000_remoteproc.ignore=1
 
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
+
+# Health: AOSP's default HAL, plus a battery that stays below its declared minimum voltage while
+# discharging reads 0 %, so that Android shuts down before the pack cuts the power (health/)
+PRODUCT_PACKAGES += \
+    android.hardware.health-service.gtowifi
+
+# Charging control (LineageOS Settings > Battery > Charging control): LineageOS' health HAL in toggle
+# mode on the charger's charging_enabled (kernel "qcom_smbx: Add charge_behaviour and charging_enabled";
+# 0 stops charging, the tablet keeps running from USB). A kids' tablet sits on its charger for days;
+# held below full the pack ages more slowly.
+PRODUCT_PACKAGES += \
+    vendor.lineage.health-service.default
+$(call soong_config_set,lineage_health,charging_control_charging_path,/sys/class/power_supply/pmi632-charger/charging_enabled)
+$(call soong_config_set,lineage_health,charging_control_charging_enabled,1)
+$(call soong_config_set,lineage_health,charging_control_charging_disabled,0)
+$(call soong_config_set_bool,lineage_health,charging_control_supports_bypass,false)
 
 # HIDL
 PRODUCT_PACKAGES += \
@@ -116,8 +142,10 @@ PRODUCT_PACKAGES += \
     init.recovery.gtowifi.rc \
     ueventd.gtowifi.rc
 
-PRODUCT_PACKAGES += \
-    use_memfd.rc
+# Shared memory through memfd: there is no ashmem driver. mainline's use_memfd.rc sets it from vendor_init,
+# which SELinux does not allow for a platform property.
+PRODUCT_SYSTEM_EXT_PROPERTIES += \
+    sys.use_memfd=true
 
 # Kernel
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false

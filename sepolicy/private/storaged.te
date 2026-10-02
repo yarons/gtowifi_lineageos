@@ -1,0 +1,5 @@
+# storaged reads the eMMC's statistics and revision below its mmc host (sysfs_devices_block here, see
+# genfs_contexts). Nothing on this tablet uses its disk statistics; storaged is private to the platform
+# policy, so the rule is here.
+dontaudit storaged sysfs_devices_block:dir r_dir_perms;
+dontaudit storaged sysfs_devices_block:file r_file_perms;

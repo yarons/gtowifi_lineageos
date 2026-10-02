@@ -1,0 +1,4 @@
+# libcamera's software ISP allocates its buffers from /dev/udmabuf. udmabuf_device is declared in the
+# platform's private policy, which the vendor policy cannot name; system_ext's private policy can, and
+# hal_camera_server is public.
+allow hal_camera_server udmabuf_device:chr_file rw_file_perms;

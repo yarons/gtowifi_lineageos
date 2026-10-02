@@ -26,8 +26,9 @@
 /dev/block/by-name/misc /misc emmc defaults defaults
 
 # Persist
-# Read-only; qcom-common puts a tmpfs-backed overlay on top. Holds WCNSS_qcom_wlan_nv.bin and sensors/sns.reg
-/dev/block/by-name/persist /mnt/vendor/persist ext4 nosuid,nodev,noatime,ro defaults
+# Read-only; qcom-common puts a tmpfs-backed overlay on top. Holds WCNSS_qcom_wlan_nv.bin and sensors/sns.reg,
+# which the kernel loads as firmware. Its files carry Samsung's labels, which this policy does not know
+/dev/block/by-name/persist /mnt/vendor/persist ext4 nosuid,nodev,noatime,ro,context=u:object_r:firmware_mnt_file:s0 defaults
 
 # Recovery
 /dev/block/by-name/recovery /recovery emmc defaults defaults

@@ -1,0 +1,45 @@
+# Gaps of the LineageOS mainline stack's policy that show on this device. To be upstreamed; here until
+# then. Each rule names the denial it answers.
+
+# vendor_start_remoteproc: the stack starts its script as "/vendor/bin/sh script" in this domain, and the
+# script lists /sys/class/remoteproc, reads names and writes states (seen: vendor_shell_exec entrypoint,
+# vendor_toolbox_exec execute_no_trans, sysfs read/write)
+allow vendor_start_remoteproc vendor_shell_exec:file { entrypoint read };
+allow vendor_start_remoteproc vendor_toolbox_exec:file rx_file_perms;
+allow vendor_start_remoteproc vendor_sysfs_remoteproc:dir r_dir_perms;
+allow vendor_start_remoteproc vendor_sysfs_remoteproc:{ file lnk_file } rw_file_perms;
+dontaudit vendor_start_remoteproc kernel:system syslog_read;
+dontaudit vendor_start_remoteproc self:capability2 syslog;
+
+# vendor_init sets the stack's minigbm properties. Not sys.use_memfd: a platform property, which vendor
+# code may not set (neverallow), so the stack's use_memfd.rc cannot work enforcing; device.mk sets it
+# as a system_ext property instead.
+set_prop(vendor_init, vendor_minigbm_prop)
+
+# vendor_msm_drm_quirks logs to the kernel log
+allow vendor_msm_drm_quirks kmsg_device:chr_file w_file_perms;
+
+# Module loading without signatures: modprobe and the kernel still look at the keyring
+dontaudit vendor_modprobe self:key { search write };
+dontaudit kernel vendor_modprobe:key search;
+
+# Lights HAL: it sets the brightness (denied: write brightness, vendor_sysfs_backlight); the stack's
+# hal_light_default.te only reads there
+allow hal_light_default vendor_sysfs_backlight:file w_file_perms;
+
+# Sensors HAL: the IIO devices of the ADSP's sensor manager sit below the remoteproc device, and the HAL
+# walks there from /sys/bus/iio (denied: search remoteproc0, remoteproc0:smd-edge)
+allow hal_sensors_default vendor_sysfs_remoteproc:dir search;
+
+# USB gadget HAL reads sys.usb.* (denied: read usb_control_prop, a public platform property)
+get_prop(hal_usb_gadget_default, usb_control_prop)
+
+# mediaserver reads the stack's minigbm properties, like the other graphics clients the stack lists
+# (denied: read vendor_minigbm_prop)
+get_prop(mediaserver, vendor_minigbm_prop)
+
+# The stack's dlkm_loader_mainline.rc writes /proc/sys/kernel/firmware_config/force_sysfs_fallback, so
+# that firmware the kernel may not read itself (persist, see kernel.te) comes through ueventd. Android
+# 16 has proc_firmware_config for that only from board API 202604 on; below that the file is plain
+# proc (denied: vendor_init write force_sysfs_fallback) -> genfs_contexts
+allow vendor_init vendor_proc_firmware_config:file w_file_perms;

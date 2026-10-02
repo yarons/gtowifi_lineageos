@@ -40,8 +40,31 @@ on post-fs
 # their device tree have no such remoteproc: nothing is started then.
 on boot
     start vendor.gtowifi-modem
+    # Charging control: LineageOS' health HAL runs as system (device.mk)
+    chown system system /sys/class/power_supply/pmi632-charger/charging_enabled
+    chmod 0664 /sys/class/power_supply/pmi632-charger/charging_enabled
 
-service vendor.gtowifi-modem /vendor/bin/sh /vendor/bin/init.gtowifi.modem.sh
+# Switched at run time; rmtfs stops the modem when it exits (it was started with -s)
+on property:sys.boot_completed=1 && property:persist.vendor.gtowifi.gnss=1
+    start vendor.gtowifi-modem
+
+on property:persist.vendor.gtowifi.gnss=0
+    stop vendor.rmtfs
+    stop vendor.tqftpserv
+
+# The modem also reads and writes files over TFTP (QRTR service 4096): its MCFG configuration under
+# /readonly (found next to its firmware) and scratch files under /readwrite. The stack starts
+# tqftpserv only with ro.vendor.qcom.soc.enable_modem_services, together with an always-on modem;
+# here it runs only while the modem does. A modem that has run once blocks the SoC's deep sleep
+# until the next restart, with or without these servers.
+on property:vendor.gtowifi.modem.state=bound
+    mkdir /data/vendor/tmp 0770 root system
+    mkdir /data/vendor/tmp/tqftpserv 0770 root system
+    mkdir /data/vendor/readwrite 0770 root system
+    start vendor.tqftpserv
+    start vendor.rmtfs
+
+service vendor.gtowifi-modem /vendor/bin/init.gtowifi.modem.sh
     user root
     group root system
     oneshot
