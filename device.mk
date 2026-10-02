@@ -147,6 +147,15 @@ PRODUCT_PACKAGES += \
 PRODUCT_SYSTEM_EXT_PROPERTIES += \
     sys.use_memfd=true
 
+# Hang safety net: Android's llkd.rc turns the kernel's hung-task detector on with
+# ro.khungtask.enable and sets hung_task_panic, so a task stuck in uninterruptible sleep for five
+# minutes panics and panic=5 restarts the tablet (BoardConfig.mk), instead of a frozen tablet
+# that only the key combination brings back. Five minutes rather than a shorter time so that a long
+# write to the slow eMMC (a large app install) is not mistaken for a hang.
+PRODUCT_SYSTEM_EXT_PROPERTIES += \
+    ro.khungtask.enable=true \
+    ro.khungtask.timeout=300
+
 # Kernel
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
 
