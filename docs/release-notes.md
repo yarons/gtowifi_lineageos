@@ -14,8 +14,8 @@ tablet's own partitions, GPU microcode comes from linux-firmware.
 ## What is new since the pre-release of 2026-09-21
 
 - **SELinux enforcing.**
-- **System suspend and CPU idle states.** Measured on the author's tablet: **0.43 % battery per hour**
-  unplugged with the screen off and Wi-Fi on, 9 to 10 days on a charge (the previous pre-release: 1.7 %
+- **System suspend and CPU idle states.** Measured on the author's tablet: about **1 % battery per hour**
+  unplugged with the screen off and Wi-Fi on, about 4 days on a charge (the previous pre-release: 1.7 %
   per hour). Wi-Fi disconnects while the tablet sleeps and reconnects within about 20 s of switching the
   screen on.
 - **Charging control** (Settings > Battery > Charging control): a tablet that lives on its charger can
@@ -43,7 +43,7 @@ tablet's own partitions, GPU microcode comes from linux-firmware.
 
 Boot from the eMMC by itself in under a minute, display with the real DRM driver, GPU (freedreno,
 OpenGL ES 3.1), backlight control, touch, keys, Wi-Fi on 2.4 and 5 GHz (WPA2), speakers, built-in
-microphone, accelerometer/auto-rotate and proximity, battery gauge, charging and charging control,
+microphone, accelerometer/auto-rotate and proximity, battery gauge (except during standby, see below), charging and charging control,
 suspend with wake-up by power key and alarms, USB (adb, MTP), Bluetooth (pairing, music to a Bluetooth
 headset), wired headphones (pre-release; not re-checked with this build), microSD cards (a 64 GB exFAT
 card), both cameras through libcamera's software ISP (preview, photos, 720p video with AAC sound at about
@@ -52,6 +52,11 @@ card), both cameras through libcamera's software ISP (preview, photos, 720p vide
 tablet.
 
 ## What does not, or was not tested
+
+**The battery percentage stands still while the tablet sleeps** and catches up in one step when the
+battery has rested long enough for the charger chip to measure it (20 points at once after a night, seen
+on 2026-10-03). The kernel's gauge counts the current only while the system is awake. Plug in when the
+tablet has been asleep for a day or more, whatever the percentage says; a kernel fix is in progress.
 
 Bluetooth calls and Bluetooth microphones (the kernel does not route the chip's voice line yet), a wired
 headset microphone, GPS fixes, USB host under Android, 1080p at 60 fps (too much for software decoding;
