@@ -4,9 +4,10 @@ Device tree for the SM-T290 (`gtowifi`, Qualcomm SDM429) running a **mainline Li
 Samsung's 4.9 vendor kernel. Product name `gtowifi_mainline`. UNOFFICIAL, not affiliated with the
 official `gtowifi` LineageOS builds.
 
-> **State (2026-10-02): boots by itself from the eMMC (boot image behind lk2nd in BOOT), real display
+> **State (2026-10-05): boots by itself from the eMMC (boot image behind lk2nd in BOOT), real display
 > driver and GPU rendering, Wi-Fi, sound, sensors and both cameras work, SELinux enforcing, system
-> suspend on: about 1 % battery per hour with the screen off (about 4 days on a charge).** Derived
+> suspend on: about 1 % battery per hour with the screen off (about 4 days on a charge), and a battery
+> percentage that follows the battery while the tablet sleeps.** Derived
 > from the `mi439_mainline` target of `LineageOS/android_device_xiaomi_mi89xx-mainline` (Xiaomi SDM439:
 > same kernel fork, same lk2nd platform, same touchscreen and Wi-Fi/Bluetooth drivers). See the hardware
 > table for what was actually seen working.
@@ -68,6 +69,7 @@ Seen on the tablet on 2026-09-20 and 2026-09-21 unless marked otherwise.
 | SELinux | | **enforcing**: `sepolicy/vendor` for the device, `sepolicy/private` (system_ext) for the few rules that need platform-private types. Shared memory from libcutils is labelled `ashmem_compat_memfd` (a patch in `patches/system/core`), so it needs no rule per pair of processes |
 | Time | the PM8953 RTC cannot be set | Sony's TimeKeep (from the stack) keeps the offset, so the clock is right after a restart without network |
 | RAM | | tight (1.9 GB). zram (1 GB) needs the init script of this tree: `swapon_all` fails on current kernels |
+| Hangs | `softlockup_panic=1` on the command line (`panic=5` restarts); hung tasks (300 s) panic through `ro.khungtask.*` and llkd's init script | a frozen tablet restarts by itself instead of waiting for the key combination (it froze twice in September: a GPU fault, the MDP fault storm); `/proc/sys/kernel/{softlockup,hung_task}_panic` = 1, `hung_task_timeout_secs` = 300 |
 
 No proprietary files are part of the build. Radio, DSP and codec firmware is loaded from the tablet's
 own partitions; GPU microcode comes from linux-firmware.

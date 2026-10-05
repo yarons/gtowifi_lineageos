@@ -5,36 +5,41 @@
 builds (those stop at 22.2 on Samsung's 4.9 kernel). This one runs Linux 7.1.3 from the msm89x7-mainline
 fork with a board port for the tablet, on LineageOS's own mainline-kernel device stack.
 
-Built from https://github.com/yarons/gtowifi_lineageos branch `lineage-23.2` (merge `11fb135`; the
-images are build 35 of commit `ee4094d`, which differs only in `tools/build-host/`) and the kernel
-https://github.com/yarons/linux_msm89x7 branch `gtowifi/android-7.1.3-r17` (commit `a6c91b0df`).
+Built from https://github.com/yarons/gtowifi_lineageos branch `lineage-23.2` (merge `9cbf923`; the
+images are build 37 of commit `5062c4d`, which differs only in `README.md` and `docs/`) and the kernel
+https://github.com/yarons/linux_msm89x7 branch `gtowifi/android-7.1.3-r19` (commit `f47a40863`).
 No proprietary files are in the images: Wi-Fi/Bluetooth, DSP and codec firmware is read from the
 tablet's own partitions, GPU microcode comes from linux-firmware.
 
-## What is new since the pre-release of 2026-09-21
+## What is new since the pre-release of 2026-10-02
 
-- **SELinux enforcing.**
-- **System suspend and CPU idle states.** Measured on the author's tablet: about **1 % battery per hour**
-  unplugged with the screen off and Wi-Fi on, about 4 days on a charge (the previous pre-release: 1.7 %
-  per hour). Wi-Fi disconnects while the tablet sleeps and reconnects within about 20 s of switching the
-  screen on.
-- **Charging control** (Settings > Battery > Charging control): a tablet that lives on its charger can
-  be held at e.g. 80 % instead of full.
-- **Empty battery:** the battery reads 0 % and Android shuts down cleanly before the pack cuts the
-  power (it used to switch off hard at about 3 %). Verified with a raised test threshold; a run-down to
-  the real threshold is still to be done.
-- **The clock survives a restart without network** (TimeKeep).
-- GPS: the modem and its location service start when asked for (`setprop persist.vendor.gtowifi.gnss 1`
-  as root); off by default because a running modem costs standby time. A position fix is untested.
-- USB host (OTG) support in the kernel (untested under Android).
+- **The battery percentage is right in standby.** The kernel now counts the charge the tablet uses while
+  it sleeps, from the charger chip's own fuel-gauge record (the PMI632's QG), and the level goes down
+  steadily. The previous pre-release left it standing still for hours and then dropped it by up to 20
+  points at once.
+- **Charging status shows at once.** Android sees charging stop or start within a fraction of a second
+  (it took up to a minute), e.g. when charging control reaches its limit.
+- **Restart instead of hanging.** A soft lockup, or a task hung for five minutes, now panics the kernel
+  and the tablet restarts by itself instead of staying frozen.
+- **Standby measured with the new gauge:** 48.5 mA asleep, about **1 % battery per hour** unplugged with
+  the screen off and Wi-Fi on, about 4 days on a charge. Wi-Fi disconnects while the tablet sleeps and
+  reconnects within about 20 s of switching the screen on. Keeping it connected through sleep (WoWLAN) was
+  tried: the tablet then wakes about 100 times an hour and uses half as much again, so it stays off.
+
+Still in this release from the pre-release of 2026-10-02: SELinux enforcing, system suspend and CPU idle
+states, charging control (Settings > Battery > Charging control), the empty-battery rule (the battery
+reads 0 % and Android shuts down cleanly before the pack cuts the power; verified with a raised test
+threshold, a run-down to the real threshold is still to be done), the clock surviving a restart without
+network (TimeKeep), GPS on demand (`setprop persist.vendor.gtowifi.gnss 1` as root; a position fix is
+untested) and USB host (OTG) support in the kernel (untested under Android).
 
 ## Read this before you flash
 
 - **userdebug build, test-keys, `adb root` works.** Do not keep anything sensitive on it.
 - Coming from Samsung's firmware or the official LineageOS build, **`userdata` has to be formatted**:
   the old data is encrypted with keys in Qualcomm's secure world, which a mainline kernel cannot reach.
-  The same applies on the way back. Make a backup first. Coming from the pre-release of 2026-09-21,
-  `userdata` can stay (that is how the author's tablet was updated).
+  The same applies on the way back. Make a backup first. Coming from an earlier pre-release
+  (2026-09-21 or 2026-10-02), `userdata` can stay (that is how the author's tablet was updated).
 - You need an **unlocked boot loader and lk2nd in the BOOT and RECOVERY partitions** first (see
   "Install"). Flashing a boot chain can leave a tablet that only starts in download mode; you should be
   comfortable restoring stock firmware with Odin. You do this at your own risk.
@@ -43,7 +48,7 @@ tablet's own partitions, GPU microcode comes from linux-firmware.
 
 Boot from the eMMC by itself in under a minute, display with the real DRM driver, GPU (freedreno,
 OpenGL ES 3.1), backlight control, touch, keys, Wi-Fi on 2.4 and 5 GHz (WPA2), speakers, built-in
-microphone, accelerometer/auto-rotate and proximity, battery gauge (except during standby, see below), charging and charging control,
+microphone, accelerometer/auto-rotate and proximity, battery gauge (also while asleep), charging and charging control,
 suspend with wake-up by power key and alarms, USB (adb, MTP), Bluetooth (pairing, music to a Bluetooth
 headset), wired headphones (pre-release; not re-checked with this build), microSD cards (a 64 GB exFAT
 card), both cameras through libcamera's software ISP (preview, photos, 720p video with AAC sound at about
@@ -52,11 +57,6 @@ card), both cameras through libcamera's software ISP (preview, photos, 720p vide
 tablet.
 
 ## What does not, or was not tested
-
-**The battery percentage stands still while the tablet sleeps** and catches up in one step when the
-battery has rested long enough for the charger chip to measure it (20 points at once after a night, seen
-on 2026-10-03). The kernel's gauge counts the current only while the system is awake. Plug in when the
-tablet has been asleep for a day or more, whatever the percentage says; a kernel fix is in progress.
 
 Bluetooth calls and Bluetooth microphones (the kernel does not route the chip's voice line yet), a wired
 headset microphone, GPS fixes, USB host under Android, 1080p at 60 fps (too much for software decoding;
@@ -75,7 +75,7 @@ deepest sleep state needs a newer kernel line that is not stable yet.
 | `boot-fastboot-v0.img` | behind lk2nd in `boot`, or `fastboot boot` | Android boot image, header v0 with the DTB appended: what lk2nd releases understand |
 | `boot.img.mkbootimg` | - | the same as header v2, for an lk2nd built with `OSVERSION_IN_BOOTIMAGE=1` |
 | `lk2nd-gtowifi-64MiB.img.xz` | `recovery` and `boot` | the boot loader stage that gives fastboot and starts the Android boot image, see "Install" |
-| `pinned-manifest-2026-10-02.xml` | - | `repo manifest -r` of the build: every LineageOS project at its exact commit |
+| `pinned-manifest-2026-10-05.xml` | - | `repo manifest -r` of the build: every LineageOS project at its exact commit |
 | `SHA256SUMS` | | checksums, also of the two unpacked files |
 
 The boot image and `vendor_dlkm.img` belong together: never mix them between releases.
@@ -138,8 +138,8 @@ is Samsung's download mode on this tablet (leave it with Volume Down + Power for
 `adb reboot recovery` boots Android again. RECOVERY keeps lk2nd with nothing behind it, so Volume Up +
 Power always ends in fastboot, whatever is in BOOT.
 
-**Updating to a newer release:** flash `vendor` and `product`, `fastboot boot` the new boot image, write
-that same boot image behind lk2nd, and only then reboot. A boot image with the kernel modules of another
+**Updating to a newer release:** flash `system`, `vendor` and `product` (`userdata` stays), `fastboot boot`
+the new boot image, write that same boot image behind lk2nd, and only then reboot. A boot image with the kernel modules of another
 build loads no modules: no display, Android restarts for ever (adb still works).
 
 **Back to Samsung's firmware: not tested by us.** Standard Samsung procedure: the full firmware for the
@@ -151,4 +151,4 @@ has to be formatted again.
 Device tree: Apache-2.0. Kernel: GPL-2.0, full history in the branch named above. libcamera v0.7.2
 (LGPL-2.1-or-later) with the patches in `libcamera/patches/` of the device tree, built through
 GloDroid's aospext. The exact revisions of all LineageOS projects of this build are in
-`pinned-manifest-2026-10-02.xml` (attached).
+`pinned-manifest-2026-10-05.xml` (attached).
