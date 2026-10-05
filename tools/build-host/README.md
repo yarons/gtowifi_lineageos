@@ -12,6 +12,7 @@ are what makes a borrowed or small machine usable.
 | `check-host.sh` | build host | read-only check: x86-64, RAM, disk, file system, container runtime |
 | `provision.sh` | build host (apt) | installs the build packages natively (Ubuntu/Debian) |
 | `setup-arch-host.sh` | build host (Arch/Manjaro), as root | Docker, passwordless `sudo docker` for the user, zram swap the size of the RAM, a polkit rule so that a running build can keep the machine awake |
+| `laptop-tune.sh` | the author's laptop (Manjaro, GRUB, btrfs root), as root | after `setup-arch-host.sh`: zswap off, a 32 GB swap file, earlier background reclaim, transparent huge pages on request only, lazy preemption, `noatime`, Wi-Fi power save off |
 | `Dockerfile` | build host | the build container (LineageOS build packages, `repo`, a recent meson for Mesa) |
 | `run-container.sh` | build host | starts that container with the tree, ccache and payload mounted; `DETACH=1` for long jobs |
 | `sync-and-build.sh` | in the container | `sync` (repo init + sync), `sources` (device tree + kernel), `patches`, `build` |
@@ -41,9 +42,9 @@ The first sync downloads well over 100 GB. Later builds leave out `sync` (the de
 
 ## 16 GB of RAM
 
-LineageOS asks for 64 GB of RAM. The tested laptop has 16 GB with 15 GB of zram and 17 GB of disk swap
-behind it (`setup-arch-host.sh`), no memory cap on the container (`MEM=none`) and 4 parallel jobs
-(`BUILD_JOBS=4`). What that took:
+LineageOS asks for 64 GB of RAM. The tested laptop has 16 GB with 15 GB of zram, 17 GB of disk swap and a
+32 GB swap file behind it (`setup-arch-host.sh`, `laptop-tune.sh`), no memory cap on the container
+(`MEM=none`) and 4 parallel jobs (`BUILD_JOBS=4`). What that took:
 
 - A first build took about 13 hours of compiling (after a 30-minute sync of ~100 GB); later ones, from
   ccache and `out/`, 15 minutes to a few hours.
@@ -51,9 +52,12 @@ behind it (`setup-arch-host.sh`), no memory cap on the container (`MEM=none`) an
   directory changes (the `sources` step re-clones the device tree, so it always runs then) and takes up
   to two hours. Leave the machine alone meanwhile: a browser and a desktop file indexer (KDE's baloo,
   which also indexes the 100+ GB tree) were enough to get soong_build killed. Turn the indexer off.
-- Swap full is not the limit: zram keeps its pages in RAM, so the kernel can run out of memory with most
-  of the swap still free. If a build is killed, run `STEPS=build` again (fewer jobs if needed): ccache and
-  `out/` are kept.
+- The one killed build (a browser open) had used all 33.6 GB of swap. Other builds logged page allocation
+  failures with 9-27 GB of swap still free: Manjaro's kernel turns zswap on, and zswap sat in front of
+  zram, writing its pages back into zram when memory was already short. `laptop-tune.sh` turns zswap off
+  and adds the swap file; `run-container.sh` makes the out-of-memory killer take other programs before
+  the build. If a build is killed, run `STEPS=build` again (fewer jobs if needed): ccache and `out/` are
+  kept.
 - Enable sshd at boot (`systemctl enable sshd`), or the host is unreachable after a restart.
 - A change that only touches the device tree's files (not its makefiles) can skip the re-clone: update
   the tree in place (`git -C device/samsung/gtowifi_mainline fetch <payload checkout> HEAD` + checkout)
