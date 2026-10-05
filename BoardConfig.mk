@@ -41,7 +41,8 @@ BOARD_KERNEL_CMDLINE := \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
     lk2nd.pass-ramoops=zap \
-    panic=5
+    panic=5 \
+    softlockup_panic=1
 
 # No console=tty0: the kernel log does not scroll over the screen at boot (this is a tablet for
 # children); the serial console of mainline/qcom-common and ramoops still get it.
@@ -49,6 +50,9 @@ BOARD_KERNEL_CMDLINE := \
 # the tablet looks frozen, still enumerates on USB, and only the Power + Volume Down combination gets
 # it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
 # (fastboot oem ramoops console, fastboot get_staged).
+# softlockup_panic=1: a CPU stuck in the kernel for longer than the soft-lockup threshold panics, and
+# panic=5 then restarts the tablet, instead of leaving it frozen (the MDP IOMMU fault storm of
+# 2026-09-30 locked CPU0 up for minutes this way). Hung tasks: ro.khungtask.* in device.mk.
 
 # SELinux enforcing (build 33 on): sepolicy/vendor covers what the permissive builds 31 and 32 logged.
 # The kernel's audit messages stay on so that anything left shows up in dmesg. For a test,

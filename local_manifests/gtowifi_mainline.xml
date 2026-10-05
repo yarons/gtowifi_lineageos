@@ -13,7 +13,7 @@
   <project path="device/samsung/gtowifi_mainline" name="gtowifi_lineageos" remote="yarons" revision="lineage-23.2" />
 
   <!-- msm89x7-mainline 7.1.3 + the gtowifi board work + the ANDROID patches (README.md, "Kernel") -->
-  <project path="kernel/mainline/msm89x7-mainline" name="linux_msm89x7" remote="yarons" revision="gtowifi/android-7.1.3-r17" clone-depth="1" />
+  <project path="kernel/mainline/msm89x7-mainline" name="linux_msm89x7" remote="yarons" revision="gtowifi/android-7.1.3-r19" clone-depth="1" />
 
   <!-- Cameras: upstream libcamera, cross-compiled with meson through aospext (libcamera/Android.mk);
        the patches in libcamera/patches/ are applied to a copy at build time. Both are pinned to what
