@@ -31,7 +31,10 @@ args=(--rm --name "$NAME" --hostname lineage-build
 	-v "$BASE/android:/home/build/android" -v "$BASE/ccache:/home/build/.ccache"
 	-v "$BASE/payload:/home/build/payload"
 	-e LINEAGE_DIR=/home/build/android/lineage -e PAYLOAD_DIR=/home/build/payload
-	-e CCACHE_DIR=/home/build/.ccache)
+	-e CCACHE_DIR=/home/build/.ccache
+	--oom-score-adj -500)
+# Out of memory, the kernel kills the host's other programs before the build: build 31d lost soong_build
+# while a browser ran (a dedicated host loses nothing by this)
 # MEM=none: no cap, so that the container may use the host's swap (a laptop with 16 GB RAM and zram);
 # a cap with --memory-swap equal to it means no swap at all
 [ "$MEM" = none ] || args+=(--memory "$MEM" --memory-swap "$MEM")
