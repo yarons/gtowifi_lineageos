@@ -1,5 +1,7 @@
 # persist.vendor.gtowifi.* (switches of this device) and vendor.gtowifi.* (states its scripts report)
 vendor_internal_prop(vendor_gtowifi_prop)
 
-# ro.vendor.vibrator.input_path (device.mk), read by the vibrator HAL
+# ro.vendor.vibrator.input_path (device.mk): set from vendor/build.prop by vendor_init, read by the
+# vibrator HAL
 vendor_internal_prop(vendor_vibrator_prop)
+set_prop(vendor_init, vendor_vibrator_prop)
