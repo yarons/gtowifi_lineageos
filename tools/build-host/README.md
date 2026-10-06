@@ -46,12 +46,15 @@ LineageOS asks for 64 GB of RAM. The tested laptop has 16 GB with 15 GB of zram,
 32 GB swap file behind it (`setup-arch-host.sh`, `laptop-tune.sh`), no memory cap on the container
 (`MEM=none`) and 8 parallel jobs (`BUILD_JOBS=8`). What that took:
 
-- A first build took about 13 hours of compiling (after a 30-minute sync of ~100 GB); later ones, from
-  ccache and `out/`, 15 minutes to a few hours.
+- A first build (empty `out/`, every compile run, ccache only written) took 8 h 18 min with 8 jobs and
+  `laptop-tune.sh`, about 2 h of it on battery at a lower power limit; before the tuning, with fewer
+  jobs, about 13 hours. Add a 30-minute sync of ~100 GB for a new host. Later builds, from ccache and
+  `out/`, take 15 minutes to a few hours.
 - soong's analysis of the tree alone peaks at about 9 GB. It runs whenever a makefile or a globbed
   directory changes (the `sources` step re-clones the device tree, so it always runs then) and takes up
-  to two hours. Leave the machine alone meanwhile: a browser and a desktop file indexer (KDE's baloo,
-  which also indexes the 100+ GB tree) were enough to get soong_build killed. Turn the indexer off.
+  to two hours (soong_build itself took 6 minutes in the timed first build; kati comes on top). Leave
+  the machine alone meanwhile: a browser and a desktop file indexer (KDE's baloo, which also indexes the
+  100+ GB tree) were enough to get soong_build killed. Turn the indexer off.
 - The one killed build (a browser open) had used all 33.6 GB of swap. Other builds logged page allocation
   failures with 9-27 GB of swap still free: Manjaro's kernel turns zswap on, and zswap sat in front of
   zram, writing its pages back into zram when memory was already short. `laptop-tune.sh` turns zswap off

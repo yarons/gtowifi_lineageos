@@ -24,7 +24,7 @@ echo
 [ "$arch" = x86_64 ] && say OK "x86-64 host" || fail "architecture is $arch: AOSP builds need an x86-64 Linux host (OCI Ampere/arm64 cannot do it)"
 
 if   [ "$mem_gb" -ge 60 ]; then say OK "RAM ${mem_gb} GiB (LineageOS asks for 64 GB from lineage-21 on)"
-elif [ "$mem_gb" -ge 14 ]; then warn "RAM ${mem_gb} GiB: builds with 32 GiB of zram + swap, MEM=none and BUILD_JOBS=8 (tested with 16 GiB: a first build compiles for about 13 hours, and soong's analysis alone peaks at ~9 GiB, so leave the machine alone meanwhile)"
+elif [ "$mem_gb" -ge 14 ]; then warn "RAM ${mem_gb} GiB: builds with 32 GiB of zram + swap, MEM=none and BUILD_JOBS=8 (tested with 16 GiB: a first build compiles for about 8 hours, and soong's analysis alone peaks at ~9 GiB, so leave the machine alone meanwhile)"
 else fail "RAM ${mem_gb} GiB: not enough for Android 16 (soong's analysis alone needs ~9 GiB)"; fi
 if [ "$mem_gb" -lt 60 ] && [ "$swap_gb" -lt 30 ]; then warn "swap ${swap_gb} GiB: setup-arch-host.sh adds zram the size of the RAM; add disk swap for 30+ GiB in total"; fi
 
