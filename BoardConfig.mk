@@ -40,7 +40,7 @@ BOARD_KERNEL_CMDLINE := \
     androidboot.fstab_suffix=$(GTOWIFI_FSTAB_SUFFIX) \
     androidboot.hardware=gtowifi \
     androidboot.verifiedbootstate=orange \
-    lk2nd.pass-ramoops=zap \
+    lk2nd.pass-ramoops \
     panic=5 \
     softlockup_panic=1
 
@@ -48,8 +48,10 @@ BOARD_KERNEL_CMDLINE := \
 # children); the serial console of mainline/qcom-common and ramoops still get it.
 # panic=5: reboot five seconds after a panic. The default, 0, leaves a panicked kernel sitting there:
 # the tablet looks frozen, still enumerates on USB, and only the Power + Volume Down combination gets
-# it back. After the reboot it sits in lk2nd, where the ramoops console of the panic can be fetched
-# (fastboot oem ramoops console, fastboot get_staged).
+# it back.
+# lk2nd.pass-ramoops (not =zap): lk2nd hands its ramoops region to the kernel without clearing it, so
+# after a panic or a hardware reset the next boot still has the previous kernel log, in
+# /sys/fs/pstore/console-ramoops-0 (with =zap every boot erased it; 2026-10-05).
 # softlockup_panic=1: a CPU stuck in the kernel for longer than the soft-lockup threshold panics, and
 # panic=5 then restarts the tablet, instead of leaving it frozen (the MDP IOMMU fault storm of
 # 2026-09-30 locked CPU0 up for minutes this way). Hung tasks: ro.khungtask.* in device.mk.

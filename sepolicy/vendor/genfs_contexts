@@ -62,3 +62,6 @@ genfscon sysfs /devices/platform/soc@0/1b0c000.cci			u:object_r:vendor_sysfs_vid
 
 # /proc/sys/kernel/firmware_config/force_sysfs_fallback, written by the stack's dlkm_loader_mainline.rc
 genfscon proc /sys/kernel/firmware_config			u:object_r:vendor_proc_firmware_config:s0
+
+# The PMI632 vibrator and its force-feedback input device (vibrator HAL)
+genfscon sysfs /devices/platform/soc@0/200f000.spmi/spmi-0/0-03/200f000.spmi:pmic@3:vibrator@5700	u:object_r:sysfs_vibrator:s0

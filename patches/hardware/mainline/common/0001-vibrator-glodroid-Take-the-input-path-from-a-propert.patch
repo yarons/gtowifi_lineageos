@@ -1,0 +1,46 @@
+From 66672ceacbed85d9b727308b1ca45e8aed58cef3 Mon Sep 17 00:00:00 2001
+From: Yaron Shahrabani <yarons@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 19:39:26 +0300
+Subject: [PATCH] vibrator: glodroid: Take the input path from a property
+
+The HAL looks for the force-feedback event node of a platform device
+named "vibrator" only. A vibrator elsewhere, such as the one on the
+PMI632 PMIC of the Samsung Galaxy Tab A 8.0 (SM-T290), was never found,
+and the HAL quietly fell back to its dummy device: Android reported
+every vibration as played while the motor stayed still.
+
+Read the sysfs directory to search from ro.vendor.vibrator.input_path,
+defaulting to the old path.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ interfaces/vibrator/glodroid/main.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/interfaces/vibrator/glodroid/main.cpp b/interfaces/vibrator/glodroid/main.cpp
+index 5f95981..80ac209 100644
+--- a/interfaces/vibrator/glodroid/main.cpp
++++ b/interfaces/vibrator/glodroid/main.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include <android-base/logging.h>
++#include <android-base/properties.h>
+ #include <android/binder_manager.h>
+ #include <android/binder_process.h>
+ 
+@@ -29,7 +30,10 @@ static const char* INPUT_PATH = "/sys/devices/platform/vibrator/input";
+ 
+ int main() {
+     ABinderProcess_setThreadPoolMaxThreadCount(0);
+-    auto device = FFDevice::create(INPUT_PATH);
++    // A vibrator that is not a platform device named "vibrator", e.g. one on a PMIC, is found under
++    // the sysfs directory the board names here.
++    std::string input_path = android::base::GetProperty("ro.vendor.vibrator.input_path", INPUT_PATH);
++    auto device = FFDevice::create(input_path.c_str());
+     if (!device) {
+         LOG(WARNING) << "Failed to create FFDevice, using dummy";
+         device = FFDeviceDummy::create();
+-- 
+2.54.0 (Apple Git-157)
+

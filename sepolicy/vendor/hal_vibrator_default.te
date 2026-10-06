@@ -1,0 +1,7 @@
+# GloDroid's vibrator HAL: finds the PMI632 vibrator's event node under the sysfs directory named by
+# ro.vendor.vibrator.input_path and plays force-feedback effects on it (device.mk, genfs_contexts)
+get_prop(hal_vibrator_default, vendor_vibrator_prop)
+allow hal_vibrator_default sysfs_vibrator:dir r_dir_perms;
+allow hal_vibrator_default sysfs_vibrator:{ file lnk_file } getattr;
+allow hal_vibrator_default input_device:dir r_dir_perms;
+allow hal_vibrator_default input_device:chr_file rw_file_perms;
