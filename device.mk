@@ -109,6 +109,12 @@ PRODUCT_VENDOR_PROPERTIES += \
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
 
+# Vibrator: a coin motor on the PMI632's vibrator peripheral (kernel driver pm8xxx-vibrator, a
+# force-feedback input device). GloDroid's HAL searches this sysfs directory for its event node
+# (patches/hardware/mainline/common)
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.vibrator.input_path=/sys/devices/platform/soc@0/200f000.spmi/spmi-0/0-03/200f000.spmi:pmic@3:vibrator@5700/input
+
 # Health: AOSP's default HAL, plus a battery that stays below its declared minimum voltage while
 # discharging reads 0 %, so that Android shuts down before the pack cuts the power (health/)
 PRODUCT_PACKAGES += \
