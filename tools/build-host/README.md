@@ -44,7 +44,7 @@ The first sync downloads well over 100 GB. Later builds leave out `sync` (the de
 
 LineageOS asks for 64 GB of RAM. The tested laptop has 16 GB with 15 GB of zram, 17 GB of disk swap and a
 32 GB swap file behind it (`setup-arch-host.sh`, `laptop-tune.sh`), no memory cap on the container
-(`MEM=none`) and 4 parallel jobs (`BUILD_JOBS=4`). What that took:
+(`MEM=none`) and 8 parallel jobs (`BUILD_JOBS=8`). What that took:
 
 - A first build took about 13 hours of compiling (after a 30-minute sync of ~100 GB); later ones, from
   ccache and `out/`, 15 minutes to a few hours.
@@ -58,6 +58,8 @@ LineageOS asks for 64 GB of RAM. The tested laptop has 16 GB with 15 GB of zram,
   and adds the swap file; `run-container.sh` makes the out-of-memory killer take other programs before
   the build. If a build is killed, run `STEPS=build` again (fewer jobs if needed): ccache and `out/` are
   kept.
+- 8 jobs compile about 16 % faster than 4 (libhwui's 385 steps, ccache off: 172 s against 206 s) and
+  still left 4 GB of RAM free. soong's analysis runs alone either way.
 - Enable sshd at boot (`systemctl enable sshd`), or the host is unreachable after a restart.
 - A change that only touches the device tree's files (not its makefiles) can skip the re-clone: update
   the tree in place (`git -C device/samsung/gtowifi_mainline fetch <payload checkout> HEAD` + checkout)
