@@ -19,15 +19,35 @@ Unlike the AOSP change a failed relabel is not fatal: the memfd keeps its
 tmpfs label as before and the failure is logged once. There is no ashmem
 driver to fall back to, so failing the allocation would break every
 process that cannot read the context file.
+
+Isolated processes (uids AID_ISOLATED_START..END) keep the tmpfs label:
+the seccomp sandbox of Chromium's renderers (WebView, Chrome) traps
+fsetxattr() with SIGSYS, which killed every renderer, so every browser
+and WebView page crashed at once.
 ---
- libcutils/ashmem-dev.cpp | 70 ++++++++++++++++++++++++++++++++++++----
- 1 file changed, 63 insertions(+), 7 deletions(-)
+ libcutils/ashmem-dev.cpp | 83 ++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 76 insertions(+), 7 deletions(-)
 
 diff --git a/libcutils/ashmem-dev.cpp b/libcutils/ashmem-dev.cpp
-index 0874655..045dc00 100644
+index 0874655..12bfb09 100644
 --- a/libcutils/ashmem-dev.cpp
 +++ b/libcutils/ashmem-dev.cpp
-@@ -29,6 +29,7 @@
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include <cutils/ashmem.h>
++#include <cutils/multiuser.h>
+ 
+ #define LOG_TAG "ashmem"
+ 
+@@ -23,12 +24,14 @@
+ #include <linux/ashmem.h>
+ #include <linux/memfd.h>
+ #include <log/log.h>
++#include <private/android_filesystem_config.h>
+ #include <sys/ioctl.h>
+ #include <sys/mman.h>
+ #include <sys/stat.h>
  #include <sys/syscall.h>
  #include <sys/sysmacros.h>
  #include <sys/types.h>
@@ -35,10 +55,15 @@ index 0874655..045dc00 100644
  #include <unistd.h>
  
  #include <android-base/file.h>
-@@ -55,6 +56,66 @@ static std::atomic<dev_t> __ashmem_rdev;
+@@ -55,6 +58,77 @@ static std::atomic<dev_t> __ashmem_rdev;
  /* set to true for verbose logging and other debug  */
  static bool debug_log = false;
  
++static bool is_isolated_process() {
++    const appid_t appid = multiuser_get_app_id(getuid());
++    return appid >= AID_ISOLATED_START && appid <= AID_ISOLATED_END;
++}
++
 +static bool assign_ashmem_label_to_memfd(android::base::unique_fd& fd) {
 +    static const std::string context = []() -> std::string {
 +        // The security context comes from a file that is part of the security policy. Hardcoding
@@ -94,7 +119,13 @@ index 0874655..045dc00 100644
 +    // per-domain memfd types and writing scalable policy targeted towards memfd specifically
 +    // difficult. Therefore, we relabel memfds allocated by libcutils with a label that the
 +    // policy has defined to allow the necessary access to memfds.
-+    assign_ashmem_label_to_memfd(fd);
++    //
++    // Not in isolated processes: the seccomp sandbox of Chromium's renderers (WebView, Chrome)
++    // traps fsetxattr() with SIGSYS and the renderer dies before the error could be handled. Their
++    // memfds keep their tmpfs label, as without this change.
++    if (!is_isolated_process()) {
++        assign_ashmem_label_to_memfd(fd);
++    }
 +
 +    return fd;
 +}
@@ -102,7 +133,7 @@ index 0874655..045dc00 100644
  /* Determine if memfd can be supported. This is just one-time hardwork
   * which will be cached by the caller.
   */
-@@ -71,10 +132,7 @@ static bool __has_memfd_support() {
+@@ -71,10 +145,7 @@ static bool __has_memfd_support() {
      }
  
      // Check that the kernel supports memfd_create().
@@ -114,7 +145,7 @@ index 0874655..045dc00 100644
      if (fd == -1) {
          ALOGE("memfd_create() failed: %m, no memfd support");
          return false;
-@@ -234,9 +292,7 @@ int ashmem_valid(int fd) {
+@@ -234,9 +305,7 @@ int ashmem_valid(int fd) {
  }
  
  static int memfd_create_region(const char* name, size_t size) {
