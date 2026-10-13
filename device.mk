@@ -115,6 +115,10 @@ PRODUCT_COPY_FILES += \
 PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.vibrator.input_path=/sys/devices/platform/soc@0/200f000.spmi/spmi-0/0-03/200f000.spmi:pmic@3:vibrator@5700/input
 
+# Power: no system power collapse while awake, only in suspend (power/cpu_latency.cpp)
+PRODUCT_PACKAGES += \
+    gtowifi_cpu_latency
+
 # Health: AOSP's default HAL, plus a battery that stays below its declared minimum voltage while
 # discharging reads 0 %, so that Android shuts down before the pack cuts the power (health/)
 PRODUCT_PACKAGES += \

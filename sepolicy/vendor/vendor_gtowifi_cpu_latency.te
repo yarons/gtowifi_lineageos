@@ -1,0 +1,8 @@
+# power/cpu_latency.cpp: holds a CPU latency QoS request through /dev/cpu_dma_latency, which the
+# platform policy leaves unlabelled (device)
+type vendor_gtowifi_cpu_latency, domain;
+type vendor_gtowifi_cpu_latency_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(vendor_gtowifi_cpu_latency)
+
+type vendor_cpu_latency_device, dev_type;
+allow vendor_gtowifi_cpu_latency vendor_cpu_latency_device:chr_file rw_file_perms;

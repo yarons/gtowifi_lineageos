@@ -27,3 +27,6 @@ modalias_handling enabled
 /dev/media*         0660   system   camera
 /dev/video*         0660   system   camera
 /dev/v4l-subdev*    0660   system   camera
+
+# CPU latency QoS: gtowifi_cpu_latency (user system) holds a request (power/)
+/dev/cpu_dma_latency    0660   system   system
