@@ -1,0 +1,9 @@
+# Keeps the system power collapse for suspend (cpu_latency.cpp). Started on init: /dev/cpu_dma_latency
+# and its label exist once ueventd's coldboot is done. init restarts it if it ever exits.
+service vendor.gtowifi_cpu_latency /vendor/bin/gtowifi_cpu_latency 2000
+    class core
+    user system
+    group system
+
+on init
+    start vendor.gtowifi_cpu_latency

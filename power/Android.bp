@@ -1,0 +1,17 @@
+//
+// SPDX-FileCopyrightText: The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+// Keeps the SoC's system power collapse for suspend: see cpu_latency.cpp.
+cc_binary {
+    name: "gtowifi_cpu_latency",
+    vendor: true,
+    init_rc: ["gtowifi_cpu_latency.rc"],
+    srcs: ["cpu_latency.cpp"],
+    shared_libs: ["libbase"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}

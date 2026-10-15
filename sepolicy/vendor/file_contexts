@@ -24,3 +24,5 @@
 # The modem's file system (EFS) for rmtfs; the stack's rmtfs may only read them
 /dev/block/platform/soc@0/7824900\.mmc/by-name/modemst[12]	u:object_r:modem_block_device:s0
 /dev/block/platform/soc@0/7824900\.mmc/by-name/fs[cg]		u:object_r:modem_block_device:s0
+/dev/cpu_dma_latency		u:object_r:vendor_cpu_latency_device:s0
+/(vendor|system/vendor)/bin/gtowifi_cpu_latency	u:object_r:vendor_gtowifi_cpu_latency_exec:s0
